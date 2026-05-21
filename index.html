@@ -3,37 +3,264 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="家計簿">
   <title>我が家の家計簿</title>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%92%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23ffd54f'/%3E%3Ctext y='.9em' font-size='75' x='12'%3E%F0%9F%93%92%3C/text%3E%3C/svg%3E">
+
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
       max-width: 600px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
       background: #f5f5f5;
+      min-height: 100vh;
     }
     h1 {
       color: #2c3e50;
       text-align: center;
+      font-size: 1.4em;
+      margin: 0 0 16px;
     }
     .card {
       background: white;
-      border-radius: 10px;
-      padding: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      margin-top: 20px;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 14px;
     }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1.05em;
+      color: #34495e;
+    }
+    label {
+      display: block;
+      font-size: 0.85em;
+      color: #666;
+      margin: 8px 0 4px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 1em;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      font-family: inherit;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    .btn {
+      display: block;
+      width: 100%;
+      color: white;
+      border: none;
+      padding: 14px;
+      font-size: 1em;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 12px;
+      font-weight: 600;
+    }
+    .btn-blue { background: #3498db; }
+    .btn-green { background: #27ae60; }
+    .entry-list { list-style: none; padding: 0; margin: 0; }
+    .entry-item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      font-size: 0.95em;
+    }
+    .entry-item:last-child { border-bottom: none; }
+    .entry-cat {
+      background: #ecf0f1;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.8em;
+      margin-right: 8px;
+      white-space: nowrap;
+    }
+    .entry-store { flex: 1; color: #555; overflow: hidden; text-overflow: ellipsis; }
+    .entry-amount { font-weight: 600; color: #2c3e50; margin-right: 4px; }
+    .entry-delete {
+      background: none;
+      border: none;
+      color: #e74c3c;
+      font-size: 1.3em;
+      cursor: pointer;
+      padding: 0 8px;
+    }
+    .total {
+      text-align: right;
+      font-size: 1.2em;
+      font-weight: 600;
+      color: #2c3e50;
+      padding: 10px;
+      background: #ecf0f1;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .empty { color: #aaa; text-align: center; padding: 16px; font-size: 0.9em; }
   </style>
 </head>
 <body>
   <h1>📒 我が家の家計簿</h1>
+
+  <!-- 日付選択 -->
   <div class="card">
-    <p>こんにちは、takuさん！</p>
-    <p>これからここに家計簿アプリを作っていきます🎉</p>
-    <p>今日: <span id="today"></span></p>
+    <label for="dateInput">📅 日付</label>
+    <input type="date" id="dateInput">
   </div>
+
+  <!-- 新規追加 -->
+  <div class="card">
+    <h2>➕ 新規追加</h2>
+    <label for="catInput">カテゴリ</label>
+    <select id="catInput">
+      <option>食費</option>
+      <option>外食</option>
+      <option>日用品</option>
+      <option>交通費</option>
+      <option>娯楽費</option>
+      <option>衣服費</option>
+      <option>美容費</option>
+      <option>医療費</option>
+      <option>教育費</option>
+      <option>車関係</option>
+      <option>その他</option>
+    </select>
+    <label for="storeInput">店名・内容</label>
+    <input type="text" id="storeInput" placeholder="例: 無印、ローソン">
+    <label for="amountInput">金額（円）</label>
+    <input type="number" id="amountInput" inputmode="numeric" placeholder="例: 634">
+    <button id="addBtn" class="btn btn-blue">追加</button>
+  </div>
+
+  <!-- 当日リスト -->
+  <div class="card">
+    <h2>📋 この日の記録</h2>
+    <ul id="entryList" class="entry-list"></ul>
+    <div class="total" id="dayTotal">日合計: 0 円</div>
+  </div>
+
+  <!-- 備考 -->
+  <div class="card">
+    <h2>📝 備考メモ</h2>
+    <textarea id="memoInput" placeholder="この日のメモ..."></textarea>
+    <button id="saveMemoBtn" class="btn btn-green">メモを保存</button>
+  </div>
+
   <script>
-    document.getElementById('today').textContent = new Date().toLocaleDateString('ja-JP');
+    // ===== ストレージキー =====
+    const STORAGE_KEY = 'kakeibo-data-v1';
+
+    // ===== ユーティリティ =====
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => Number(n).toLocaleString('ja-JP');
+    const todayStr = () => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+
+    // ===== データ操作 =====
+    function loadData() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+      catch { return {}; }
+    }
+    function saveData(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+    function getDayEntry(date) {
+      const data = loadData();
+      return data[date] || { purchases: [], memo: '' };
+    }
+    function setDayEntry(date, entry) {
+      const data = loadData();
+      data[date] = entry;
+      saveData(data);
+    }
+
+    // ===== 描画 =====
+    function render() {
+      const date = $('dateInput').value;
+      const entry = getDayEntry(date);
+
+      const list = $('entryList');
+      list.innerHTML = '';
+      if (entry.purchases.length === 0) {
+        list.innerHTML = '<li class="empty">この日の記録はまだありません</li>';
+      } else {
+        entry.purchases.forEach((p, i) => {
+          const li = document.createElement('li');
+          li.className = 'entry-item';
+          li.innerHTML = `
+            <span class="entry-cat">${p.category}</span>
+            <span class="entry-store">${p.store || ''}</span>
+            <span class="entry-amount">${fmt(p.amount)}円</span>
+            <button class="entry-delete" data-i="${i}">×</button>
+          `;
+          list.appendChild(li);
+        });
+      }
+
+      const total = entry.purchases.reduce((s, p) => s + Number(p.amount || 0), 0);
+      $('dayTotal').textContent = `日合計: ${fmt(total)} 円`;
+
+      $('memoInput').value = entry.memo || '';
+    }
+
+    // ===== イベント =====
+    $('dateInput').addEventListener('change', render);
+
+    $('addBtn').addEventListener('click', () => {
+      const date = $('dateInput').value;
+      const category = $('catInput').value;
+      const store = $('storeInput').value.trim();
+      const amount = Number($('amountInput').value);
+      if (!amount || amount <= 0) {
+        alert('金額を入力してください');
+        return;
+      }
+      const entry = getDayEntry(date);
+      entry.purchases.push({ category, store, amount });
+      setDayEntry(date, entry);
+      $('storeInput').value = '';
+      $('amountInput').value = '';
+      render();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('entry-delete')) {
+        if (!confirm('この項目を削除しますか？')) return;
+        const date = $('dateInput').value;
+        const i = Number(e.target.dataset.i);
+        const entry = getDayEntry(date);
+        entry.purchases.splice(i, 1);
+        setDayEntry(date, entry);
+        render();
+      }
+    });
+
+    $('saveMemoBtn').addEventListener('click', () => {
+      const date = $('dateInput').value;
+      const entry = getDayEntry(date);
+      entry.memo = $('memoInput').value;
+      setDayEntry(date, entry);
+      alert('メモを保存しました ✅');
+    });
+
+    // ===== 初期化 =====
+    $('dateInput').value = todayStr();
+    render();
   </script>
 </body>
 </html>
