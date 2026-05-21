@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我が家の家計簿</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #2c3e50;
+      text-align: center;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📒 我が家の家計簿</h1>
+  <div class="card">
+    <p>こんにちは、takuさん！</p>
+    <p>これからここに家計簿アプリを作っていきます🎉</p>
+    <p>今日: <span id="today"></span></p>
+  </div>
+  <script>
+    document.getElementById('today').textContent = new Date().toLocaleDateString('ja-JP');
+  </script>
+</body>
+</html>
