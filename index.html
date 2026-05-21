@@ -86,6 +86,7 @@
       margin-right: 8px;
       white-space: nowrap;
     }
+    .entry-cat.custom { background: #fff3cd; color: #856404; }
     .entry-store { flex: 1; color: #555; overflow: hidden; text-overflow: ellipsis; }
     .entry-amount { font-weight: 600; color: #2c3e50; margin-right: 4px; }
     .entry-delete {
@@ -107,6 +108,7 @@
       margin-top: 10px;
     }
     .empty { color: #aaa; text-align: center; padding: 16px; font-size: 0.9em; }
+    .hint { font-size: 0.8em; color: #888; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -135,6 +137,15 @@
       <option>車関係</option>
       <option>その他</option>
     </select>
+
+    <!-- その他選択時のみ表示 -->
+    <div id="customCatRow" style="display:none">
+      <label for="customCatInput">カテゴリ名（任意の名称）</label>
+      <input type="text" id="customCatInput" list="customCatList" placeholder="例: プレゼント代、車検代">
+      <datalist id="customCatList"></datalist>
+      <div class="hint">💡 過去に使った名前は候補から選べます</div>
+    </div>
+
     <label for="storeInput">店名・内容</label>
     <input type="text" id="storeInput" placeholder="例: 無印、ローソン">
     <label for="amountInput">金額（円）</label>
@@ -159,6 +170,12 @@
   <script>
     // ===== ストレージキー =====
     const STORAGE_KEY = 'kakeibo-data-v1';
+
+    // 標準カテゴリ（プルダウン）
+    const STANDARD_CATEGORIES = [
+      '食費','外食','日用品','交通費','娯楽費',
+      '衣服費','美容費','医療費','教育費','車関係'
+    ];
 
     // ===== ユーティリティ =====
     const $ = (id) => document.getElementById(id);
@@ -189,6 +206,25 @@
       saveData(data);
     }
 
+    // 過去に使ったカスタムカテゴリ一覧を取得
+    function getCustomCategories() {
+      const data = loadData();
+      const set = new Set();
+      Object.values(data).forEach(entry => {
+        (entry.purchases || []).forEach(p => {
+          if (p.isCustom && p.category) set.add(p.category);
+        });
+      });
+      return Array.from(set).sort();
+    }
+
+    // datalist を更新（候補表示用）
+    function updateDatalist() {
+      const dl = $('customCatList');
+      dl.innerHTML = getCustomCategories()
+        .map(c => `<option value="${c}">`).join('');
+    }
+
     // ===== 描画 =====
     function render() {
       const date = $('dateInput').value;
@@ -202,8 +238,9 @@
         entry.purchases.forEach((p, i) => {
           const li = document.createElement('li');
           li.className = 'entry-item';
+          const catClass = p.isCustom ? 'entry-cat custom' : 'entry-cat';
           li.innerHTML = `
-            <span class="entry-cat">${p.category}</span>
+            <span class="${catClass}">${p.category}</span>
             <span class="entry-store">${p.store || ''}</span>
             <span class="entry-amount">${fmt(p.amount)}円</span>
             <button class="entry-delete" data-i="${i}">×</button>
@@ -218,26 +255,56 @@
       $('memoInput').value = entry.memo || '';
     }
 
-    // ===== イベント =====
-    $('dateInput').addEventListener('change', render);
+    // ===== カテゴリ切り替え =====
+    $('catInput').addEventListener('change', () => {
+      const isOther = $('catInput').value === 'その他';
+      $('customCatRow').style.display = isOther ? 'block' : 'none';
+      if (isOther) {
+        updateDatalist();
+        $('customCatInput').focus();
+      }
+    });
 
+    // ===== 追加 =====
     $('addBtn').addEventListener('click', () => {
       const date = $('dateInput').value;
-      const category = $('catInput').value;
+      let category = $('catInput').value;
+      let isCustom = false;
+
+      // その他の場合はカスタム名で上書き
+      if (category === 'その他') {
+        const customName = $('customCatInput').value.trim();
+        if (!customName) {
+          alert('カテゴリ名を入力してください');
+          return;
+        }
+        category = customName;
+        isCustom = true;
+      }
+
       const store = $('storeInput').value.trim();
       const amount = Number($('amountInput').value);
       if (!amount || amount <= 0) {
         alert('金額を入力してください');
         return;
       }
+
       const entry = getDayEntry(date);
-      entry.purchases.push({ category, store, amount });
+      entry.purchases.push({ category, store, amount, isCustom });
       setDayEntry(date, entry);
+
+      // フォームリセット
       $('storeInput').value = '';
       $('amountInput').value = '';
+      $('customCatInput').value = '';
+      $('catInput').value = '食費';
+      $('customCatRow').style.display = 'none';
+
       render();
+      updateDatalist();
     });
 
+    // ===== 削除 =====
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('entry-delete')) {
         if (!confirm('この項目を削除しますか？')) return;
@@ -250,6 +317,10 @@
       }
     });
 
+    // ===== 日付変更 =====
+    $('dateInput').addEventListener('change', render);
+
+    // ===== メモ保存 =====
     $('saveMemoBtn').addEventListener('click', () => {
       const date = $('dateInput').value;
       const entry = getDayEntry(date);
@@ -261,6 +332,7 @@
     // ===== 初期化 =====
     $('dateInput').value = todayStr();
     render();
+    updateDatalist();
   </script>
 </body>
 </html>
