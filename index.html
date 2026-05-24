@@ -20,13 +20,35 @@
       padding: 16px;
       background: #f5f5f5;
       min-height: 100vh;
+      padding-bottom: 60px;
     }
-    h1 {
-      color: #2c3e50;
-      text-align: center;
-      font-size: 1.4em;
-      margin: 0 0 16px;
+    h1 { color: #2c3e50; text-align: center; font-size: 1.4em; margin: 0 0 16px; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 14px;
+      background: white;
+      border-radius: 10px;
+      padding: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     }
+    .tab {
+      flex: 1;
+      padding: 10px 4px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      font-size: 0.9em;
+      cursor: pointer;
+      color: #666;
+      font-weight: 600;
+    }
+    .tab.active { background: #3498db; color: white; }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
     .card {
       background: white;
       border-radius: 12px;
@@ -34,17 +56,8 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       margin-bottom: 14px;
     }
-    .card h2 {
-      margin: 0 0 10px;
-      font-size: 1.05em;
-      color: #34495e;
-    }
-    label {
-      display: block;
-      font-size: 0.85em;
-      color: #666;
-      margin: 8px 0 4px;
-    }
+    .card h2 { margin: 0 0 10px; font-size: 1.05em; color: #34495e; }
+    label { display: block; font-size: 0.85em; color: #666; margin: 8px 0 4px; }
     input, select, textarea {
       width: 100%;
       padding: 10px;
@@ -56,146 +69,236 @@
     }
     textarea { min-height: 70px; resize: vertical; }
     .btn {
-      display: block;
-      width: 100%;
-      color: white;
-      border: none;
-      padding: 14px;
-      font-size: 1em;
-      border-radius: 10px;
-      cursor: pointer;
-      margin-top: 12px;
-      font-weight: 600;
+      display: block; width: 100%; color: white; border: none;
+      padding: 14px; font-size: 1em; border-radius: 10px;
+      cursor: pointer; margin-top: 12px; font-weight: 600;
     }
     .btn-blue { background: #3498db; }
     .btn-green { background: #27ae60; }
+
     .entry-list { list-style: none; padding: 0; margin: 0; }
     .entry-item {
-      display: flex;
-      align-items: center;
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-      font-size: 0.95em;
+      display: flex; align-items: center; padding: 10px;
+      border-bottom: 1px solid #eee; font-size: 0.95em;
     }
     .entry-item:last-child { border-bottom: none; }
     .entry-cat {
-      background: #ecf0f1;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 0.8em;
-      margin-right: 8px;
-      white-space: nowrap;
+      background: #ecf0f1; padding: 2px 8px; border-radius: 12px;
+      font-size: 0.8em; margin-right: 8px; white-space: nowrap;
     }
     .entry-cat.custom { background: #fff3cd; color: #856404; }
     .entry-store { flex: 1; color: #555; overflow: hidden; text-overflow: ellipsis; }
     .entry-amount { font-weight: 600; color: #2c3e50; margin-right: 4px; }
-    .entry-delete {
-      background: none;
-      border: none;
-      color: #e74c3c;
-      font-size: 1.3em;
-      cursor: pointer;
-      padding: 0 8px;
-    }
+    .entry-delete { background: none; border: none; color: #e74c3c; font-size: 1.3em; cursor: pointer; padding: 0 8px; }
+
     .total {
-      text-align: right;
-      font-size: 1.2em;
-      font-weight: 600;
-      color: #2c3e50;
-      padding: 10px;
-      background: #ecf0f1;
-      border-radius: 8px;
-      margin-top: 10px;
+      text-align: right; font-size: 1.2em; font-weight: 600;
+      color: #2c3e50; padding: 10px; background: #ecf0f1;
+      border-radius: 8px; margin-top: 10px;
     }
     .empty { color: #aaa; text-align: center; padding: 16px; font-size: 0.9em; }
     .hint { font-size: 0.8em; color: #888; margin-top: 4px; }
+
+    .period-nav { display: flex; align-items: center; gap: 8px; }
+    .period-nav button {
+      padding: 8px 14px; background: #ecf0f1; border: none;
+      border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 600;
+    }
+    .period-nav .period-label {
+      flex: 1; text-align: center; font-size: 1.05em;
+      font-weight: 600; color: #2c3e50;
+    }
+    .breakdown-list { list-style: none; padding: 0; margin: 0; }
+    .breakdown-item {
+      display: flex; justify-content: space-between;
+      padding: 10px; border-bottom: 1px solid #eee;
+      font-size: 0.95em;
+    }
+    .breakdown-item:last-child { border-bottom: none; }
+    .breakdown-item[data-jump] { cursor: pointer; }
+    .breakdown-item[data-jump]:active { background: #f0f4f8; }
+    .breakdown-label { color: #555; }
+    .breakdown-amount { font-weight: 600; color: #2c3e50; }
   </style>
 </head>
 <body>
   <h1>📒 我が家の家計簿</h1>
 
-  <!-- 日付選択 -->
-  <div class="card">
-    <label for="dateInput">📅 日付</label>
-    <input type="date" id="dateInput">
+  <div class="tabs">
+    <button class="tab active" data-tab="day">📅 日</button>
+    <button class="tab" data-tab="week">📆 週</button>
+    <button class="tab" data-tab="month">🗓️ 月</button>
+    <button class="tab" data-tab="year">📊 年</button>
   </div>
 
-  <!-- 新規追加 -->
-  <div class="card">
-    <h2>➕ 新規追加</h2>
-    <label for="catInput">カテゴリ</label>
-    <select id="catInput">
-      <option>食費</option>
-      <option>外食</option>
-      <option>日用品</option>
-      <option>交通費</option>
-      <option>娯楽費</option>
-      <option>衣服費</option>
-      <option>美容費</option>
-      <option>医療費</option>
-      <option>教育費</option>
-      <option>車関係</option>
-      <option>その他</option>
-    </select>
-
-    <!-- その他選択時のみ表示 -->
-    <div id="customCatRow" style="display:none">
-      <label for="customCatInput">カテゴリ名（任意の名称）</label>
-      <input type="text" id="customCatInput" list="customCatList" placeholder="例: プレゼント代、車検代">
-      <datalist id="customCatList"></datalist>
-      <div class="hint">💡 過去に使った名前は候補から選べます</div>
+  <!-- 日タブ -->
+  <div class="tab-pane active" id="pane-day">
+    <div class="card">
+      <label for="dateInput">📅 日付</label>
+      <input type="date" id="dateInput">
     </div>
 
-    <label for="storeInput">店名・内容</label>
-    <input type="text" id="storeInput" placeholder="例: 無印、ローソン">
-    <label for="amountInput">金額（円）</label>
-    <input type="number" id="amountInput" inputmode="numeric" placeholder="例: 634">
-    <button id="addBtn" class="btn btn-blue">追加</button>
+    <div class="card">
+      <h2>➕ 新規追加</h2>
+      <label for="catInput">カテゴリ</label>
+      <select id="catInput">
+        <option>食費</option><option>外食</option><option>日用品</option>
+        <option>交通費</option><option>娯楽費</option><option>衣服費</option>
+        <option>美容費</option><option>医療費</option><option>教育費</option>
+        <option>車関係</option><option>その他</option>
+      </select>
+      <div id="customCatRow" style="display:none">
+        <label for="customCatInput">カテゴリ名（任意の名称）</label>
+        <input type="text" id="customCatInput" list="customCatList" placeholder="例: プレゼント代">
+        <datalist id="customCatList"></datalist>
+        <div class="hint">💡 過去に使った名前は候補から選べます</div>
+      </div>
+      <label for="storeInput">店名・内容</label>
+      <input type="text" id="storeInput" placeholder="例: 無印、ローソン">
+      <label for="amountInput">金額（円）</label>
+      <input type="number" id="amountInput" inputmode="numeric" placeholder="例: 634">
+      <button id="addBtn" class="btn btn-blue">追加</button>
+    </div>
+
+    <div class="card">
+      <h2>📋 この日の記録</h2>
+      <ul id="entryList" class="entry-list"></ul>
+      <div class="total" id="dayTotal">日合計: 0 円</div>
+    </div>
+
+    <div class="card">
+      <h2>📊 カテゴリ別合計</h2>
+      <ul id="dayCategoryList" class="breakdown-list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>📝 備考メモ</h2>
+      <textarea id="memoInput" placeholder="この日のメモ..."></textarea>
+      <button id="saveMemoBtn" class="btn btn-green">メモを保存</button>
+    </div>
   </div>
 
-  <!-- 当日リスト -->
-  <div class="card">
-    <h2>📋 この日の記録</h2>
-    <ul id="entryList" class="entry-list"></ul>
-    <div class="total" id="dayTotal">日合計: 0 円</div>
+  <!-- 週タブ -->
+  <div class="tab-pane" id="pane-week">
+    <div class="card">
+      <div class="period-nav">
+        <button id="weekPrev">←</button>
+        <span class="period-label" id="weekLabel"></span>
+        <button id="weekNext">→</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📅 日別合計 <span class="hint">（タップでその日へ）</span></h2>
+      <ul id="weekDayList" class="breakdown-list"></ul>
+      <div class="total" id="weekTotal">週合計: 0 円</div>
+    </div>
+    <div class="card">
+      <h2>📊 カテゴリ別合計</h2>
+      <ul id="weekCategoryList" class="breakdown-list"></ul>
+    </div>
+    <div class="card">
+      <h2>📝 週の備考</h2>
+      <textarea id="weekMemo" placeholder="この週のメモ..."></textarea>
+      <button id="saveWeekMemoBtn" class="btn btn-green">週メモを保存</button>
+    </div>
   </div>
 
-  <!-- 備考 -->
-  <div class="card">
-    <h2>📝 備考メモ</h2>
-    <textarea id="memoInput" placeholder="この日のメモ..."></textarea>
-    <button id="saveMemoBtn" class="btn btn-green">メモを保存</button>
+  <!-- 月タブ -->
+  <div class="tab-pane" id="pane-month">
+    <div class="card">
+      <div class="period-nav">
+        <button id="monthPrev">←</button>
+        <span class="period-label" id="monthLabel"></span>
+        <button id="monthNext">→</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>📆 週別合計</h2>
+      <ul id="monthWeekList" class="breakdown-list"></ul>
+      <div class="total" id="monthTotal">月合計: 0 円</div>
+    </div>
+    <div class="card">
+      <h2>📊 カテゴリ別合計</h2>
+      <ul id="monthCategoryList" class="breakdown-list"></ul>
+    </div>
+    <div class="card">
+      <h2>📝 月の備考</h2>
+      <textarea id="monthMemo" placeholder="この月のメモ..."></textarea>
+      <button id="saveMonthMemoBtn" class="btn btn-green">月メモを保存</button>
+    </div>
+  </div>
+
+  <!-- 年タブ -->
+  <div class="tab-pane" id="pane-year">
+    <div class="card">
+      <div class="period-nav">
+        <button id="yearPrev">←</button>
+        <span class="period-label" id="yearLabel"></span>
+        <button id="yearNext">→</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>🗓️ 月別合計</h2>
+      <ul id="yearMonthList" class="breakdown-list"></ul>
+      <div class="total" id="yearTotal">年合計: 0 円</div>
+    </div>
+    <div class="card">
+      <h2>📊 カテゴリ別合計</h2>
+      <ul id="yearCategoryList" class="breakdown-list"></ul>
+    </div>
+    <div class="card">
+      <h2>📝 年の備考</h2>
+      <textarea id="yearMemo" placeholder="この年のメモ..."></textarea>
+      <button id="saveYearMemoBtn" class="btn btn-green">年メモを保存</button>
+    </div>
   </div>
 
   <script>
     // ===== ストレージキー =====
     const STORAGE_KEY = 'kakeibo-data-v1';
-
-    // 標準カテゴリ（プルダウン）
-    const STANDARD_CATEGORIES = [
-      '食費','外食','日用品','交通費','娯楽費',
-      '衣服費','美容費','医療費','教育費','車関係'
-    ];
+    const META_KEY = 'kakeibo-meta-v1';
 
     // ===== ユーティリティ =====
     const $ = (id) => document.getElementById(id);
+    const $$ = (sel) => document.querySelectorAll(sel);
     const fmt = (n) => Number(n).toLocaleString('ja-JP');
+    const pad = (n) => String(n).padStart(2, '0');
     const todayStr = () => {
       const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${dd}`;
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     };
+    const formatYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    function addDays(date, n) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + n);
+      return d;
+    }
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+    const getMonthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+    const getMonthEnd = (d) => new Date(d.getFullYear(), d.getMonth()+1, 0);
+    const WEEK_DAYS = ['日','月','火','水','木','金','土'];
 
     // ===== データ操作 =====
     function loadData() {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
       catch { return {}; }
     }
-    function saveData(data) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+    function loadMeta() {
+      try {
+        const m = JSON.parse(localStorage.getItem(META_KEY));
+        return m || { weekMemo: {}, monthMemo: {}, yearMemo: {} };
+      } catch { return { weekMemo: {}, monthMemo: {}, yearMemo: {} }; }
     }
+    function saveMeta(meta) { localStorage.setItem(META_KEY, JSON.stringify(meta)); }
+
     function getDayEntry(date) {
       const data = loadData();
       return data[date] || { purchases: [], memo: '' };
@@ -206,30 +309,68 @@
       saveData(data);
     }
 
-    // 過去に使ったカスタムカテゴリ一覧を取得
+    function aggregateByCategory(startDate, endDate) {
+      const data = loadData();
+      const result = {};
+      const start = formatYMD(startDate);
+      const end = formatYMD(endDate);
+      Object.keys(data).forEach(date => {
+        if (date >= start && date <= end) {
+          (data[date].purchases || []).forEach(p => {
+            result[p.category] = (result[p.category] || 0) + Number(p.amount || 0);
+          });
+        }
+      });
+      return result;
+    }
+    function aggregatePeriodTotal(startDate, endDate) {
+      return Object.values(aggregateByCategory(startDate, endDate)).reduce((s,n)=>s+n,0);
+    }
+    function getDayTotal(date) {
+      return getDayEntry(date).purchases.reduce((s,p)=>s+Number(p.amount||0),0);
+    }
+
     function getCustomCategories() {
       const data = loadData();
       const set = new Set();
       Object.values(data).forEach(entry => {
-        (entry.purchases || []).forEach(p => {
-          if (p.isCustom && p.category) set.add(p.category);
-        });
+        (entry.purchases || []).forEach(p => { if (p.isCustom && p.category) set.add(p.category); });
       });
       return Array.from(set).sort();
     }
-
-    // datalist を更新（候補表示用）
     function updateDatalist() {
-      const dl = $('customCatList');
-      dl.innerHTML = getCustomCategories()
-        .map(c => `<option value="${c}">`).join('');
+      $('customCatList').innerHTML = getCustomCategories().map(c => `<option value="${c}">`).join('');
     }
 
-    // ===== 描画 =====
-    function render() {
+    function renderBreakdown(listEl, items, options = {}) {
+      if (items.length === 0) {
+        listEl.innerHTML = '<li class="empty">データなし</li>';
+        return;
+      }
+      listEl.innerHTML = items.map(item => {
+        const jumpAttr = item.jump ? `data-jump="${item.jump}"` : '';
+        return `<li class="breakdown-item" ${jumpAttr}>
+          <span class="breakdown-label">${item.label}</span>
+          <span class="breakdown-amount">${fmt(item.amount)}円</span>
+        </li>`;
+      }).join('');
+    }
+
+    // ===== タブ切り替え =====
+    function switchTab(tabName) {
+      $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+      $$('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `pane-${tabName}`));
+      if (tabName === 'day') renderDay();
+      if (tabName === 'week') renderWeek();
+      if (tabName === 'month') renderMonth();
+      if (tabName === 'year') renderYear();
+    }
+    $$('.tab').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+    // ============= 日タブ =============
+    function renderDay() {
       const date = $('dateInput').value;
       const entry = getDayEntry(date);
-
       const list = $('entryList');
       list.innerHTML = '';
       if (entry.purchases.length === 0) {
@@ -243,68 +384,50 @@
             <span class="${catClass}">${p.category}</span>
             <span class="entry-store">${p.store || ''}</span>
             <span class="entry-amount">${fmt(p.amount)}円</span>
-            <button class="entry-delete" data-i="${i}">×</button>
-          `;
+            <button class="entry-delete" data-i="${i}">×</button>`;
           list.appendChild(li);
         });
       }
-
-      const total = entry.purchases.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const total = entry.purchases.reduce((s,p)=>s+Number(p.amount||0),0);
       $('dayTotal').textContent = `日合計: ${fmt(total)} 円`;
+
+      const cats = {};
+      entry.purchases.forEach(p => { cats[p.category] = (cats[p.category]||0)+Number(p.amount||0); });
+      const items = Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c => ({label: c, amount: cats[c]}));
+      renderBreakdown($('dayCategoryList'), items);
 
       $('memoInput').value = entry.memo || '';
     }
 
-    // ===== カテゴリ切り替え =====
+    $('dateInput').addEventListener('change', renderDay);
     $('catInput').addEventListener('change', () => {
       const isOther = $('catInput').value === 'その他';
       $('customCatRow').style.display = isOther ? 'block' : 'none';
-      if (isOther) {
-        updateDatalist();
-        $('customCatInput').focus();
-      }
+      if (isOther) { updateDatalist(); $('customCatInput').focus(); }
     });
-
-    // ===== 追加 =====
     $('addBtn').addEventListener('click', () => {
       const date = $('dateInput').value;
       let category = $('catInput').value;
       let isCustom = false;
-
-      // その他の場合はカスタム名で上書き
       if (category === 'その他') {
-        const customName = $('customCatInput').value.trim();
-        if (!customName) {
-          alert('カテゴリ名を入力してください');
-          return;
-        }
-        category = customName;
-        isCustom = true;
+        const c = $('customCatInput').value.trim();
+        if (!c) { alert('カテゴリ名を入力してください'); return; }
+        category = c; isCustom = true;
       }
-
       const store = $('storeInput').value.trim();
       const amount = Number($('amountInput').value);
-      if (!amount || amount <= 0) {
-        alert('金額を入力してください');
-        return;
-      }
-
+      if (!amount || amount <= 0) { alert('金額を入力してください'); return; }
       const entry = getDayEntry(date);
       entry.purchases.push({ category, store, amount, isCustom });
       setDayEntry(date, entry);
-
-      // フォームリセット
       $('storeInput').value = '';
       $('amountInput').value = '';
       $('customCatInput').value = '';
       $('catInput').value = '食費';
       $('customCatRow').style.display = 'none';
-
-      render();
+      renderDay();
       updateDatalist();
     });
-
-    // ===== 削除 =====
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('entry-delete')) {
         if (!confirm('この項目を削除しますか？')) return;
@@ -313,14 +436,14 @@
         const entry = getDayEntry(date);
         entry.purchases.splice(i, 1);
         setDayEntry(date, entry);
-        render();
+        renderDay();
+      }
+      const jumpEl = e.target.closest('[data-jump]');
+      if (jumpEl) {
+        $('dateInput').value = jumpEl.dataset.jump;
+        switchTab('day');
       }
     });
-
-    // ===== 日付変更 =====
-    $('dateInput').addEventListener('change', render);
-
-    // ===== メモ保存 =====
     $('saveMemoBtn').addEventListener('click', () => {
       const date = $('dateInput').value;
       const entry = getDayEntry(date);
@@ -329,9 +452,133 @@
       alert('メモを保存しました ✅');
     });
 
+    // ============= 週タブ =============
+    let weekAnchor = new Date();
+    function renderWeek() {
+      const start = getWeekStart(weekAnchor);
+      const end = addDays(start, 6);
+      $('weekLabel').textContent =
+        `${start.getMonth()+1}/${start.getDate()}(${WEEK_DAYS[start.getDay()]}) 〜 ${end.getMonth()+1}/${end.getDate()}(${WEEK_DAYS[end.getDay()]})`;
+
+      const dayItems = [];
+      let weekTotal = 0;
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(start, i);
+        const t = getDayTotal(formatYMD(d));
+        weekTotal += t;
+        dayItems.push({
+          label: `${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,
+          amount: t, jump: formatYMD(d)
+        });
+      }
+      renderBreakdown($('weekDayList'), dayItems);
+      $('weekTotal').textContent = `週合計: ${fmt(weekTotal)} 円`;
+
+      const cats = aggregateByCategory(start, end);
+      const catItems = Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c => ({label: c, amount: cats[c]}));
+      renderBreakdown($('weekCategoryList'), catItems);
+
+      $('weekMemo').value = loadMeta().weekMemo[formatYMD(start)] || '';
+    }
+    $('weekPrev').addEventListener('click', () => { weekAnchor = addDays(weekAnchor, -7); renderWeek(); });
+    $('weekNext').addEventListener('click', () => { weekAnchor = addDays(weekAnchor, 7); renderWeek(); });
+    $('saveWeekMemoBtn').addEventListener('click', () => {
+      const meta = loadMeta();
+      meta.weekMemo[formatYMD(getWeekStart(weekAnchor))] = $('weekMemo').value;
+      saveMeta(meta);
+      alert('週メモを保存しました ✅');
+    });
+
+    // ============= 月タブ =============
+    let monthAnchor = new Date();
+    function renderMonth() {
+      const start = getMonthStart(monthAnchor);
+      const end = getMonthEnd(monthAnchor);
+      $('monthLabel').textContent = `${start.getFullYear()}年${start.getMonth()+1}月`;
+
+      const weekItems = [];
+      let monthTotal = 0;
+      let weekIdx = 1;
+      let cur = getWeekStart(start);
+      while (cur <= end) {
+        const weekEnd = addDays(cur, 6);
+        const rangeStart = cur < start ? start : cur;
+        const rangeEnd = weekEnd > end ? end : weekEnd;
+        const wt = aggregatePeriodTotal(rangeStart, rangeEnd);
+        monthTotal += wt;
+        weekItems.push({
+          label: `第${weekIdx}週 (${rangeStart.getMonth()+1}/${rangeStart.getDate()} 〜 ${rangeEnd.getMonth()+1}/${rangeEnd.getDate()})`,
+          amount: wt
+        });
+        cur = addDays(cur, 7);
+        weekIdx++;
+      }
+      renderBreakdown($('monthWeekList'), weekItems);
+      $('monthTotal').textContent = `月合計: ${fmt(monthTotal)} 円`;
+
+      const cats = aggregateByCategory(start, end);
+      const catItems = Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c => ({label: c, amount: cats[c]}));
+      renderBreakdown($('monthCategoryList'), catItems);
+
+      const ymKey = `${start.getFullYear()}-${pad(start.getMonth()+1)}`;
+      $('monthMemo').value = loadMeta().monthMemo[ymKey] || '';
+    }
+    $('monthPrev').addEventListener('click', () => {
+      monthAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth()-1, 1); renderMonth();
+    });
+    $('monthNext').addEventListener('click', () => {
+      monthAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth()+1, 1); renderMonth();
+    });
+    $('saveMonthMemoBtn').addEventListener('click', () => {
+      const meta = loadMeta();
+      const s = getMonthStart(monthAnchor);
+      meta.monthMemo[`${s.getFullYear()}-${pad(s.getMonth()+1)}`] = $('monthMemo').value;
+      saveMeta(meta);
+      alert('月メモを保存しました ✅');
+    });
+
+    // ============= 年タブ =============
+    let yearAnchor = new Date();
+    function renderYear() {
+      const year = yearAnchor.getFullYear();
+      const start = new Date(year, 0, 1);
+      const end = new Date(year, 11, 31);
+      $('yearLabel').textContent = `${year}年`;
+
+      const monthItems = [];
+      let yearTotal = 0;
+      for (let m = 0; m < 12; m++) {
+        const ms = new Date(year, m, 1);
+        const me = new Date(year, m+1, 0);
+        const t = aggregatePeriodTotal(ms, me);
+        yearTotal += t;
+        monthItems.push({ label: `${m+1}月`, amount: t });
+      }
+      renderBreakdown($('yearMonthList'), monthItems);
+      $('yearTotal').textContent = `年合計: ${fmt(yearTotal)} 円`;
+
+      const cats = aggregateByCategory(start, end);
+      const catItems = Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c => ({label: c, amount: cats[c]}));
+      renderBreakdown($('yearCategoryList'), catItems);
+
+      $('yearMemo').value = loadMeta().yearMemo[year] || '';
+    }
+    $('yearPrev').addEventListener('click', () => {
+      yearAnchor = new Date(yearAnchor.getFullYear()-1, 0, 1); renderYear();
+    });
+    $('yearNext').addEventListener('click', () => {
+      yearAnchor = new Date(yearAnchor.getFullYear()+1, 0, 1); renderYear();
+    });
+    $('saveYearMemoBtn').addEventListener('click', () => {
+      const meta = loadMeta();
+      meta.yearMemo[yearAnchor.getFullYear()] = $('yearMemo').value;
+      saveMeta(meta);
+      alert('年メモを保存しました ✅');
+    });
+
     // ===== 初期化 =====
     $('dateInput').value = todayStr();
-    render();
+    renderDay();
     updateDatalist();
   </script>
 </body>
