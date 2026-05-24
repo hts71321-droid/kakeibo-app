@@ -34,6 +34,16 @@
     .tab-pane { display: none; }
     .tab-pane.active { display: block; }
 
+    .sub-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .sub-tab {
+      flex: 1; padding: 10px; border: 1px solid #ddd;
+      background: white; border-radius: 10px;
+      font-size: 0.95em; cursor: pointer; font-weight: 600; color: #555;
+    }
+    .sub-tab.active { background: #27ae60; color: white; border-color: #27ae60; }
+    .sub-pane { display: none; }
+    .sub-pane.active { display: block; }
+
     .card {
       background: white; border-radius: 12px; padding: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 14px;
@@ -54,6 +64,11 @@
     .btn-blue { background: #3498db; }
     .btn-green { background: #27ae60; }
     .btn-gray { background: #95a5a6; }
+    .btn-small { padding: 8px; font-size: 0.9em; margin-top: 6px; }
+
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row > * { flex: 1; }
+    .row > span { flex: 0; }
 
     .entry-list { list-style: none; padding: 0; margin: 0; }
     .entry-item {
@@ -91,12 +106,11 @@
       padding: 10px; border-bottom: 1px solid #eee; font-size: 0.95em;
     }
     .breakdown-item:last-child { border-bottom: none; }
-    .breakdown-item[data-jump] { cursor: pointer; }
-    .breakdown-item[data-jump]:active { background: #f0f4f8; }
+    .breakdown-item[data-jump], .breakdown-item[data-jump-week] { cursor: pointer; }
+    .breakdown-item[data-jump]:active, .breakdown-item[data-jump-week]:active { background: #f0f4f8; }
     .breakdown-label { color: #555; }
     .breakdown-amount { font-weight: 600; color: #2c3e50; }
 
-    /* 定期タブ */
     .reg-list { list-style: none; padding: 0; margin: 0 0 10px; }
     .reg-item {
       display: flex; justify-content: space-between; align-items: flex-start;
@@ -114,15 +128,8 @@
     }
     .reg-actions button.del { color: #e74c3c; border-color: #e74c3c; }
 
-    /* 月収支サマリー */
-    .summary-row {
-      display: flex; justify-content: space-between;
-      padding: 6px 0; font-size: 1em;
-    }
-    .summary-sub {
-      display: flex; justify-content: space-between;
-      padding: 2px 0 2px 16px; font-size: 0.85em; color: #888;
-    }
+    .summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 1em; }
+    .summary-sub { display: flex; justify-content: space-between; padding: 2px 0 2px 16px; font-size: 0.85em; color: #888; }
     .summary-row.income { color: #27ae60; font-weight: 600; }
     .summary-row.expense { color: #555; }
     .summary-row.balance {
@@ -131,6 +138,12 @@
     }
     .summary-row.balance.positive { color: #27ae60; }
     .summary-row.balance.negative { color: #e74c3c; }
+
+    .preset-row { display: flex; gap: 6px; margin-top: 8px; }
+    .preset-row button {
+      flex: 1; padding: 8px; border: 1px solid #ddd; background: white;
+      border-radius: 8px; font-size: 0.85em; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -226,7 +239,7 @@
       <div id="monthSummary"></div>
     </div>
     <div class="card">
-      <h2>📆 週別の合計（変動支出）</h2>
+      <h2>📆 週別の合計（変動支出）<span class="hint">（タップでその週へ）</span></h2>
       <ul id="monthWeekList" class="breakdown-list"></ul>
       <div class="total" id="monthVarTotal">変動支出合計: 0 円</div>
     </div>
@@ -256,7 +269,20 @@
       </div>
     </div>
     <div class="card">
-      <h2>💼 年収支サマリー</h2>
+      <h2>📆 集計期間</h2>
+      <div class="row">
+        <input type="month" id="yearStart">
+        <span>〜</span>
+        <input type="month" id="yearEnd">
+      </div>
+      <div class="preset-row">
+        <button id="yearPresetYTD">今日まで</button>
+        <button id="yearPresetAll">通年</button>
+      </div>
+      <div class="hint">💡 デフォルトは「1月〜今月」。固定費を含めても比較しやすく</div>
+    </div>
+    <div class="card">
+      <h2>💼 期間収支サマリー</h2>
       <div id="yearSummary"></div>
     </div>
     <div class="card">
@@ -277,52 +303,63 @@
 
   <!-- 定期タブ -->
   <div class="tab-pane" id="pane-regular">
-    <!-- 収入 -->
-    <div class="card">
-      <h2>💰 収入</h2>
-      <ul id="incomeList" class="reg-list"></ul>
-      <button id="addIncomeBtn" class="btn btn-blue">+ 収入を追加</button>
-    </div>
-    <div class="card" id="incomeForm" style="display:none">
-      <h2 id="incomeFormTitle">💰 収入の追加</h2>
-      <label>人</label>
-      <select id="incomePerson">
-        <option>自分</option><option>妻</option><option>その他</option>
-      </select>
-      <label>項目名（給与・賞与・副業など）</label>
-      <input type="text" id="incomeLabel" placeholder="例: 給与">
-      <label>金額（円）</label>
-      <input type="number" id="incomeAmount" inputmode="numeric">
-      <label>開始月</label>
-      <input type="month" id="incomeStart">
-      <label>終了月（空欄=継続中）</label>
-      <input type="month" id="incomeEnd">
-      <label>メモ</label>
-      <input type="text" id="incomeMemo" placeholder="任意">
-      <button id="saveIncomeBtn" class="btn btn-green">保存</button>
-      <button id="cancelIncomeBtn" class="btn btn-gray">キャンセル</button>
+    <div class="sub-tabs">
+      <button class="sub-tab active" data-sub="income">💰 収入</button>
+      <button class="sub-tab" data-sub="fixed">📌 固定費</button>
     </div>
 
-    <!-- 固定費 -->
-    <div class="card">
-      <h2>📌 固定費（毎月の支出）</h2>
-      <ul id="fixedList" class="reg-list"></ul>
-      <button id="addFixedBtn" class="btn btn-blue">+ 固定費を追加</button>
+    <!-- 収入セクション -->
+    <div class="sub-pane active" id="sub-income">
+      <div class="card">
+        <h2>💰 登録済みの収入</h2>
+        <ul id="incomeList" class="reg-list"></ul>
+        <button id="addIncomeBtn" class="btn btn-blue">+ 収入を追加</button>
+      </div>
+      <div class="card" id="incomeForm" style="display:none">
+        <h2 id="incomeFormTitle">💰 収入の追加</h2>
+        <label>人</label>
+        <select id="incomePerson">
+          <option>自分</option><option>妻</option><option>その他</option>
+        </select>
+        <label>種別</label>
+        <select id="incomeLabel">
+          <option>給与</option><option>賞与</option><option>その他</option>
+        </select>
+        <label>金額（円）</label>
+        <input type="number" id="incomeAmount" inputmode="numeric">
+        <label>開始月</label>
+        <input type="month" id="incomeStart">
+        <label>終了月（空欄=継続中）</label>
+        <input type="month" id="incomeEnd">
+        <label>メモ（自由記入）</label>
+        <input type="text" id="incomeMemo" placeholder="例: 副業の月収、ボーナス内訳など">
+        <button id="saveIncomeBtn" class="btn btn-green">保存</button>
+        <button id="cancelIncomeBtn" class="btn btn-gray">キャンセル</button>
+      </div>
     </div>
-    <div class="card" id="fixedForm" style="display:none">
-      <h2 id="fixedFormTitle">📌 固定費の追加</h2>
-      <label>項目名</label>
-      <input type="text" id="fixedLabel" placeholder="例: 住居費、SPOTIFY、NISA">
-      <label>金額（円）</label>
-      <input type="number" id="fixedAmount" inputmode="numeric">
-      <label>開始月</label>
-      <input type="month" id="fixedStart">
-      <label>終了月（空欄=継続中）</label>
-      <input type="month" id="fixedEnd">
-      <label>メモ</label>
-      <input type="text" id="fixedMemo" placeholder="任意">
-      <button id="saveFixedBtn" class="btn btn-green">保存</button>
-      <button id="cancelFixedBtn" class="btn btn-gray">キャンセル</button>
+
+    <!-- 固定費セクション -->
+    <div class="sub-pane" id="sub-fixed">
+      <div class="card">
+        <h2>📌 登録済みの固定費</h2>
+        <ul id="fixedList" class="reg-list"></ul>
+        <button id="addFixedBtn" class="btn btn-blue">+ 固定費を追加</button>
+      </div>
+      <div class="card" id="fixedForm" style="display:none">
+        <h2 id="fixedFormTitle">📌 固定費の追加</h2>
+        <label>項目名</label>
+        <input type="text" id="fixedLabel" placeholder="例: 住居費、SPOTIFY、NISA">
+        <label>金額（円）</label>
+        <input type="number" id="fixedAmount" inputmode="numeric">
+        <label>開始月</label>
+        <input type="month" id="fixedStart">
+        <label>終了月（空欄=継続中）</label>
+        <input type="month" id="fixedEnd">
+        <label>メモ</label>
+        <input type="text" id="fixedMemo" placeholder="任意">
+        <button id="saveFixedBtn" class="btn btn-green">保存</button>
+        <button id="cancelFixedBtn" class="btn btn-gray">キャンセル</button>
+      </div>
     </div>
   </div>
 
@@ -396,7 +433,9 @@
     function renderBreakdown(listEl, items) {
       if (items.length === 0) { listEl.innerHTML = '<li class="empty">データなし</li>'; return; }
       listEl.innerHTML = items.map(item => {
-        const jumpAttr = item.jump ? `data-jump="${item.jump}"` : '';
+        let jumpAttr = '';
+        if (item.jump) jumpAttr = `data-jump="${item.jump}"`;
+        else if (item.jumpWeek) jumpAttr = `data-jump-week="${item.jumpWeek}"`;
         return `<li class="breakdown-item" ${jumpAttr}>
           <span class="breakdown-label">${item.label}</span>
           <span class="breakdown-amount">${fmt(item.amount)}円</span>
@@ -414,6 +453,15 @@
       if (name === 'regular') renderRegular();
     }
     $$('.tab').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+    // サブタブ切替
+    $$('.sub-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sub = btn.dataset.sub;
+        $$('.sub-tab').forEach(b => b.classList.toggle('active', b === btn));
+        $$('.sub-pane').forEach(p => p.classList.toggle('active', p.id === `sub-${sub}`));
+      });
+    });
 
     // ===== 日タブ =====
     function renderDay() {
@@ -507,7 +555,6 @@
       const ym = ymKey(start);
       $('monthLabel').textContent = `${start.getFullYear()}年${start.getMonth()+1}月`;
 
-      // 週別
       const weekItems = []; let varTotal = 0; let weekIdx = 1; let cur = getWeekStart(start);
       while (cur <= end) {
         const we = addDays(cur, 6);
@@ -515,29 +562,30 @@
         const re = we > end ? end : we;
         const wt = aggregatePeriodTotal(rs, re);
         varTotal += wt;
-        weekItems.push({ label: `第${weekIdx}週 (${rs.getMonth()+1}/${rs.getDate()} 〜 ${re.getMonth()+1}/${re.getDate()})`, amount: wt });
+        weekItems.push({
+          label: `第${weekIdx}週 (${rs.getMonth()+1}/${rs.getDate()} 〜 ${re.getMonth()+1}/${re.getDate()})`,
+          amount: wt,
+          jumpWeek: formatYMD(cur)
+        });
         cur = addDays(cur, 7); weekIdx++;
       }
       renderBreakdown($('monthWeekList'), weekItems);
       $('monthVarTotal').textContent = `変動支出合計: ${fmt(varTotal)} 円`;
 
-      // カテゴリ別
       const cats = aggregateByCategory(start, end);
       renderBreakdown($('monthCategoryList'), Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
 
-      // 固定費一覧
       const fixedItems = getActiveFixed(ym);
       const fixedTotal = sumAmounts(fixedItems);
       renderBreakdown($('monthFixedList'), fixedItems.map(f => ({ label: f.label, amount: f.amount })));
       $('monthFixedTotal').textContent = `固定費合計: ${fmt(fixedTotal)} 円`;
 
-      // サマリー
       const incomes = getActiveIncomes(ym);
       const incomeTotal = sumAmounts(incomes);
       const balance = incomeTotal - varTotal - fixedTotal;
       $('monthSummary').innerHTML = `
         <div class="summary-row income"><span>💰 収入合計</span><span>${fmt(incomeTotal)} 円</span></div>
-        ${incomes.map(i => `<div class="summary-sub"><span>　${i.person}: ${i.label}</span><span>${fmt(i.amount)}円</span></div>`).join('')}
+        ${incomes.map(i => `<div class="summary-sub"><span>　${i.person}: ${i.label}${i.memo?' ('+i.memo+')':''}</span><span>${fmt(i.amount)}円</span></div>`).join('')}
         <div class="summary-row expense"><span>🛒 変動支出</span><span>${fmt(varTotal)} 円</span></div>
         <div class="summary-row expense"><span>📌 固定費</span><span>${fmt(fixedTotal)} 円</span></div>
         <div class="summary-row balance ${balance >= 0 ? 'positive' : 'negative'}">
@@ -555,40 +603,90 @@
 
     // ===== 年タブ =====
     let yearAnchor = new Date();
+    let yearViewYear = null;
+    function setYearPeriodDefaults() {
+      const year = yearAnchor.getFullYear();
+      const now = new Date();
+      $('yearStart').value = `${year}-01`;
+      if (year < now.getFullYear()) {
+        $('yearEnd').value = `${year}-12`;
+      } else if (year === now.getFullYear()) {
+        $('yearEnd').value = `${year}-${pad(now.getMonth()+1)}`;
+      } else {
+        $('yearEnd').value = `${year}-01`;
+      }
+    }
     function renderYear() {
       const year = yearAnchor.getFullYear();
-      const start = new Date(year, 0, 1), end = new Date(year, 11, 31);
       $('yearLabel').textContent = `${year}年`;
 
-      const monthItems = []; let yearVarTotal = 0; let yearIncomeTotal = 0; let yearFixedTotal = 0;
-      for (let m = 0; m < 12; m++) {
-        const ms = new Date(year, m, 1), me = new Date(year, m+1, 0);
-        const ym = `${year}-${pad(m+1)}`;
+      if (yearViewYear !== year) {
+        yearViewYear = year;
+        setYearPeriodDefaults();
+      }
+
+      const startYM = $('yearStart').value || `${year}-01`;
+      const endYM = $('yearEnd').value || `${year}-12`;
+      if (startYM > endYM) {
+        $('yearSummary').innerHTML = '<div class="empty">開始月が終了月より後になっています</div>';
+        $('yearMonthList').innerHTML = '';
+        $('yearCategoryList').innerHTML = '';
+        $('yearVarTotal').textContent = '変動支出合計: 0 円';
+        return;
+      }
+      const [sy, sm] = startYM.split('-').map(Number);
+      const [ey, em] = endYM.split('-').map(Number);
+      const periodStart = new Date(sy, sm-1, 1);
+      const periodEnd = new Date(ey, em, 0);
+
+      let yearVarTotal = 0, yearIncomeTotal = 0, yearFixedTotal = 0;
+      const monthItems = [];
+      let cm = new Date(sy, sm-1, 1);
+      while (cm <= periodEnd) {
+        const ms = new Date(cm.getFullYear(), cm.getMonth(), 1);
+        const me = new Date(cm.getFullYear(), cm.getMonth()+1, 0);
+        const ym = `${cm.getFullYear()}-${pad(cm.getMonth()+1)}`;
         const mvt = aggregatePeriodTotal(ms, me);
         yearVarTotal += mvt;
         yearIncomeTotal += sumAmounts(getActiveIncomes(ym));
         yearFixedTotal += sumAmounts(getActiveFixed(ym));
-        monthItems.push({ label: `${m+1}月`, amount: mvt });
+        monthItems.push({ label: `${cm.getMonth()+1}月`, amount: mvt });
+        cm = new Date(cm.getFullYear(), cm.getMonth()+1, 1);
       }
       renderBreakdown($('yearMonthList'), monthItems);
       $('yearVarTotal').textContent = `変動支出合計: ${fmt(yearVarTotal)} 円`;
 
-      const cats = aggregateByCategory(start, end);
+      const cats = aggregateByCategory(periodStart, periodEnd);
       renderBreakdown($('yearCategoryList'), Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
 
       const yearBalance = yearIncomeTotal - yearVarTotal - yearFixedTotal;
       $('yearSummary').innerHTML = `
+        <div class="hint">📆 ${startYM} 〜 ${endYM}</div>
         <div class="summary-row income"><span>💰 収入合計</span><span>${fmt(yearIncomeTotal)} 円</span></div>
         <div class="summary-row expense"><span>🛒 変動支出合計</span><span>${fmt(yearVarTotal)} 円</span></div>
         <div class="summary-row expense"><span>📌 固定費合計</span><span>${fmt(yearFixedTotal)} 円</span></div>
         <div class="summary-row balance ${yearBalance >= 0 ? 'positive' : 'negative'}">
-          <span>💼 年収支</span><span>${yearBalance >= 0 ? '+' : ''}${fmt(yearBalance)} 円</span>
+          <span>💼 期間収支</span><span>${yearBalance >= 0 ? '+' : ''}${fmt(yearBalance)} 円</span>
         </div>`;
 
       $('yearMemo').value = loadMeta().yearMemo[year] || '';
     }
-    $('yearPrev').addEventListener('click', () => { yearAnchor = new Date(yearAnchor.getFullYear()-1, 0, 1); renderYear(); });
-    $('yearNext').addEventListener('click', () => { yearAnchor = new Date(yearAnchor.getFullYear()+1, 0, 1); renderYear(); });
+    $('yearPrev').addEventListener('click', () => { yearAnchor = new Date(yearAnchor.getFullYear()-1, 0, 1); yearViewYear = null; renderYear(); });
+    $('yearNext').addEventListener('click', () => { yearAnchor = new Date(yearAnchor.getFullYear()+1, 0, 1); yearViewYear = null; renderYear(); });
+    $('yearStart').addEventListener('change', renderYear);
+    $('yearEnd').addEventListener('change', renderYear);
+    $('yearPresetYTD').addEventListener('click', () => {
+      const year = yearAnchor.getFullYear(); const now = new Date();
+      $('yearStart').value = `${year}-01`;
+      if (year === now.getFullYear()) $('yearEnd').value = `${year}-${pad(now.getMonth()+1)}`;
+      else $('yearEnd').value = `${year}-12`;
+      renderYear();
+    });
+    $('yearPresetAll').addEventListener('click', () => {
+      const year = yearAnchor.getFullYear();
+      $('yearStart').value = `${year}-01`; $('yearEnd').value = `${year}-12`;
+      renderYear();
+    });
     $('saveYearMemoBtn').addEventListener('click', () => {
       const meta = loadMeta(); meta.yearMemo[yearAnchor.getFullYear()] = $('yearMemo').value;
       saveMeta(meta); alert('年メモを保存しました ✅');
@@ -598,7 +696,6 @@
     let editingIncomeId = null, editingFixedId = null;
 
     function renderRegular() { renderIncomes(); renderFixed(); }
-
     function renderIncomes() {
       const items = loadMeta().incomes || [];
       const list = $('incomeList');
@@ -618,7 +715,6 @@
         </li>`;
       }).join('');
     }
-
     function renderFixed() {
       const items = loadMeta().fixedCosts || [];
       const list = $('fixedList');
@@ -643,7 +739,7 @@
       editingIncomeId = item ? item.id : null;
       $('incomeFormTitle').textContent = item ? '💰 収入の編集' : '💰 収入の追加';
       $('incomePerson').value = item?.person || '自分';
-      $('incomeLabel').value = item?.label || '';
+      $('incomeLabel').value = item?.label || '給与';
       $('incomeAmount').value = item?.amount || '';
       $('incomeStart').value = item?.startMonth || todayMonthStr();
       $('incomeEnd').value = item?.endMonth || '';
@@ -670,12 +766,11 @@
     $('cancelIncomeBtn').addEventListener('click', hideIncomeForm);
     $('saveIncomeBtn').addEventListener('click', () => {
       const person = $('incomePerson').value;
-      const label = $('incomeLabel').value.trim();
+      const label = $('incomeLabel').value;
       const amount = Number($('incomeAmount').value);
       const startMonth = $('incomeStart').value;
       const endMonth = $('incomeEnd').value || null;
       const memo = $('incomeMemo').value.trim();
-      if (!label) { alert('項目名を入力してください'); return; }
       if (!amount || amount <= 0) { alert('金額を入力してください'); return; }
       if (!startMonth) { alert('開始月を入力してください'); return; }
       const meta = loadMeta();
@@ -711,7 +806,6 @@
       saveMeta(meta); hideFixedForm(); renderFixed();
     });
 
-    // 共通クリック（編集・削除・ジャンプ・項目削除）
     document.addEventListener('click', (e) => {
       const t = e.target;
       if (t.classList.contains('entry-delete')) {
@@ -721,7 +815,14 @@
         setDayEntry(date, entry); renderDay();
       }
       const jumpEl = t.closest('[data-jump]');
-      if (jumpEl) { $('dateInput').value = jumpEl.dataset.jump; switchTab('day'); }
+      if (jumpEl) { $('dateInput').value = jumpEl.dataset.jump; switchTab('day'); return; }
+      const jumpWeekEl = t.closest('[data-jump-week]');
+      if (jumpWeekEl) {
+        const ws = jumpWeekEl.dataset.jumpWeek;
+        const [y,m,d] = ws.split('-').map(Number);
+        weekAnchor = new Date(y, m-1, d);
+        switchTab('week'); return;
+      }
 
       if (t.dataset.editIncome) {
         const item = (loadMeta().incomes||[]).find(i => i.id === t.dataset.editIncome);
@@ -745,7 +846,6 @@
       }
     });
 
-    // ===== 初期化 =====
     $('dateInput').value = todayStr();
     renderDay();
     updateDatalist();
