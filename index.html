@@ -303,6 +303,19 @@
         <div class="total" id="monthSpecialTotal">特別出費合計: 0 円</div>
       </div>
       <div class="card">
+        <h2>💳 クレジットカード引き落とし</h2>
+        <div id="monthCCList"></div>
+        <div style="margin-top:10px">
+          <div class="row" style="gap:6px">
+            <input type="text" id="ccCard" placeholder="カード名（例: 楽天）" style="flex:2">
+            <input type="number" id="ccAmount" inputmode="numeric" placeholder="金額" style="flex:1">
+          </div>
+          <input type="text" id="ccNote" placeholder="メモ（任意）" style="margin-top:6px">
+          <button id="addCCBtn" class="btn btn-blue btn-small">＋ 追加</button>
+        </div>
+        <div class="total" id="monthCCTotal" style="display:none">CC合計: 0 円</div>
+      </div>
+      <div class="card">
         <h2>📝 月の備考</h2>
         <textarea id="monthMemo" placeholder="この月のメモ..."></textarea>
         <button id="saveMonthMemoBtn" class="btn btn-green">月メモを保存</button>
@@ -646,6 +659,14 @@ $('addBtn').addEventListener('click',()=>{
   const entry=getDayEntry(date); entry.purchases.push({category,store,amount,isCustom}); setDayEntry(date,entry);
   $('storeInput').value='';$('amountInput').value='';$('customCatInput').value='';$('catInput').value='食費';$('customCatRow').style.display='none';
   renderDay();updateDatalist();
+  // 予算オーバー警告
+  const b=getBudget();
+  if(b.monthlyVariableDefault){
+    const d=new Date(date),ms=getMonthStart(d),me=getMonthEnd(d);
+    const monthTotal=aggregatePeriodTotal(ms,me);
+    const eff=b.monthlyVariableDefault+computeCarryOver(d.getFullYear(),d.getMonth()+1);
+    if(monthTotal>eff){ alert(`⚠️ 月の予算を超えました！\n予算: ${fmt(eff)}円\n今月: ${fmt(monthTotal)}円\n超過: ${fmt(monthTotal-eff)}円`); }
+  }
 });
 $('saveMemoBtn').addEventListener('click',()=>{ const date=$('dateInput').value,entry=getDayEntry(date); entry.memo=$('memoInput').value; setDayEntry(date,entry); alert('メモを保存しました ✅'); });
 
@@ -744,6 +765,7 @@ function renderMonth(){
 
   renderMonthBudget(year,mIdx,varTotal);
   renderMonthComparison(year,mIdx);
+  renderMonthCC(ym);
   $('monthMemo').value=loadMeta().monthMemo[ym]||'';
 }
 
@@ -789,6 +811,36 @@ function renderMonthComparison(year,mIdx){
       <div class="cmp-total cmp-r ${td>0?'cmp-up':td<0?'cmp-down':'cmp-neu'}">${td>0?'+':''}${fmt(td)}${td>0?' ↑':td<0?' ↓':''}</div>
     </div>`;
 }
+
+// ==================== クレカメモ ====================
+function renderMonthCC(ym){
+  const meta=loadMeta(),entries=(meta.ccMemos||{})[ym]||[];
+  const total=entries.reduce((s,e)=>s+Number(e.amount||0),0);
+  if(!entries.length){ $('monthCCList').innerHTML='<div class="empty" style="padding:8px">まだ記録がありません</div>'; $('monthCCTotal').style.display='none'; return; }
+  $('monthCCList').innerHTML=entries.map(e=>`
+    <div class="item-row">
+      <div class="item-info">
+        <div class="item-label">💳 ${e.card}</div>
+        ${e.note?`<div class="item-sub">${e.note}</div>`:''}
+      </div>
+      <div style="font-weight:600;margin-right:8px">${fmt(e.amount)}円</div>
+      <button class="entry-delete" data-del-cc="${e.id}" data-cc-ym="${ym}">×</button>
+    </div>`).join('');
+  $('monthCCTotal').style.display='block';
+  $('monthCCTotal').textContent=`CC引き落とし合計: ${fmt(total)} 円`;
+}
+$('addCCBtn').addEventListener('click',()=>{
+  const ym=ymKey(getMonthStart(monthAnchor));
+  const card=$('ccCard').value.trim(),amount=Number($('ccAmount').value);
+  if(!card){alert('カード名を入力してください');return;}
+  if(!amount||amount<=0){alert('金額を入力してください');return;}
+  const meta=loadMeta();
+  if(!meta.ccMemos) meta.ccMemos={};
+  if(!meta.ccMemos[ym]) meta.ccMemos[ym]=[];
+  meta.ccMemos[ym].push({id:genId(),card,amount,note:$('ccNote').value.trim()});
+  saveMeta(meta);$('ccCard').value='';$('ccAmount').value='';$('ccNote').value='';
+  renderMonthCC(ym);
+});
 
 $('monthPrev').addEventListener('click',()=>{monthAnchor=new Date(monthAnchor.getFullYear(),monthAnchor.getMonth()-1,1);renderMonth();});
 $('monthNext').addEventListener('click',()=>{monthAnchor=new Date(monthAnchor.getFullYear(),monthAnchor.getMonth()+1,1);renderMonth();});
@@ -1021,6 +1073,11 @@ document.addEventListener('click',e=>{
   if(t.dataset.delSpecialItem) deleteItem('special-item',t.dataset.delSpecialItem);
   if(t.dataset.rename) renameEntity(t.dataset.rename,t.dataset.id);
   if(t.dataset.move) moveEntity(t.dataset.move,t.dataset.id,t.dataset.dir);
+  if(t.dataset.delCc){
+    const ym=t.dataset.ccYm,meta=loadMeta();
+    if(meta.ccMemos?.[ym]) meta.ccMemos[ym]=meta.ccMemos[ym].filter(e=>e.id!==t.dataset.delCc);
+    saveMeta(meta);renderMonthCC(ym);
+  }
 });
 
 // ==================== Firebase ====================
