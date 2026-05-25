@@ -1232,12 +1232,13 @@ document.addEventListener('click',e=>{
         else if(calcOp==='×') r=a*b; else if(calcOp==='÷') r=b!==0?a/b:0;
         calcVal = String(Math.round(r * 100) / 100);
         calcExpr = ''; calcOp = null; calcNewNum = true;
-        // 金額欄に反映して閉じる
-        $('amountInput').value = Math.round(parseFloat(calcVal));
-        updateDisplay();
-        setTimeout(closeCalc, 300);
-        return;
       }
+      // 計算あり・なしどちらでも金額欄に反映して閉じる
+      const result = Math.round(parseFloat(calcVal));
+      if(result > 0) $('amountInput').value = result;
+      updateDisplay();
+      setTimeout(closeCalc, 300);
+      return;
     } else if(action === 'clear'){
       calcVal='0'; calcExpr=''; calcOp=null; calcNewNum=true;
     } else if(action === 'backspace'){
