@@ -217,6 +217,46 @@
       <textarea id="memoInput" placeholder="この日のメモ..."></textarea>
       <button id="saveMemoBtn" class="btn btn-green">メモを保存</button>
     </div>
+    <div class="card" style="padding:12px">
+      <button id="ocrOpenBtn" class="btn btn-orange" style="width:100%;margin:0">📷 手書きをカメラで読み取る（OCR）</button>
+    </div>
+  </div>
+
+  <!-- ========== OCRモーダル ========== -->
+  <div id="ocrModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+    <div style="background:#fff;margin:16px auto;max-width:520px;border-radius:12px;padding:20px">
+      <h2 style="margin:0 0 12px">📷 手書き家計簿 OCR読み取り</h2>
+
+      <label style="font-size:13px;font-weight:600">Gemini APIキー</label>
+      <input id="ocrApiKey" type="password" placeholder="AIza..." style="width:100%;box-sizing:border-box;margin:4px 0 4px;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px">
+      <label style="font-size:12px;color:#555"><input type="checkbox" id="ocrSaveKey" style="margin-right:4px">このブラウザに保存する</label>
+
+      <div style="margin-top:12px">
+        <label style="font-size:13px;font-weight:600">写真を選択 または 撮影</label><br>
+        <input id="ocrFileInput" type="file" accept="image/*" capture="environment" style="margin-top:4px;font-size:14px">
+      </div>
+
+      <div id="ocrPreviewWrap" style="display:none;margin-top:8px;text-align:center">
+        <img id="ocrPreview" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid #ddd">
+      </div>
+
+      <button id="ocrReadBtn" class="btn btn-blue" style="width:100%;margin:12px 0 0" disabled>🔍 読み取り開始</button>
+
+      <div id="ocrLoading" style="display:none;text-align:center;padding:16px;color:#666">
+        <div style="font-size:24px;animation:spin 1s linear infinite;display:inline-block">⏳</div>
+        <p style="margin:4px 0 0;font-size:13px">Gemini AIが読み取り中...</p>
+      </div>
+
+      <div id="ocrResultWrap" style="display:none;margin-top:12px">
+        <h3 style="font-size:14px;margin:0 0 6px">読み取り結果（内容を確認・修正できます）</h3>
+        <div id="ocrResultTable" style="overflow-x:auto"></div>
+        <button id="ocrRegisterBtn" class="btn btn-green" style="width:100%;margin-top:10px">✅ チェックした項目を全て登録</button>
+      </div>
+
+      <div id="ocrError" style="display:none;color:#c00;font-size:13px;margin-top:8px;padding:8px;background:#fff0f0;border-radius:6px"></div>
+
+      <button id="ocrCloseBtn" style="width:100%;margin-top:12px;padding:10px;background:#eee;border:none;border-radius:8px;font-size:14px;cursor:pointer">閉じる</button>
+    </div>
   </div>
 
   <!-- ========== 週タブ ========== -->
@@ -1079,6 +1119,153 @@ document.addEventListener('click',e=>{
     saveMeta(meta);renderMonthCC(ym);
   }
 });
+
+// ==================== OCR ====================
+const GEMINI_KEY_STORAGE = 'kakeibo-gemini-key';
+let _ocrImageBase64 = null, _ocrImageMime = null;
+
+(function initOCR(){
+  const savedKey = localStorage.getItem(GEMINI_KEY_STORAGE);
+  if(savedKey){ $('ocrApiKey').value = savedKey; $('ocrSaveKey').checked = true; }
+
+  $('ocrOpenBtn').addEventListener('click', () => {
+    $('ocrModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  });
+  $('ocrCloseBtn').addEventListener('click', closeOcrModal);
+  $('ocrModal').addEventListener('click', e => { if(e.target === $('ocrModal')) closeOcrModal(); });
+
+  $('ocrFileInput').addEventListener('change', e => {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target.result;
+      _ocrImageMime = file.type || 'image/jpeg';
+      _ocrImageBase64 = dataUrl.split(',')[1];
+      $('ocrPreview').src = dataUrl;
+      $('ocrPreviewWrap').style.display = 'block';
+      $('ocrReadBtn').disabled = false;
+      $('ocrResultWrap').style.display = 'none';
+      $('ocrError').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $('ocrReadBtn').addEventListener('click', runOCR);
+  $('ocrRegisterBtn').addEventListener('click', registerOCRResults);
+})();
+
+function closeOcrModal(){
+  $('ocrModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function runOCR(){
+  const apiKey = $('ocrApiKey').value.trim();
+  if(!apiKey){ showOcrError('Gemini APIキーを入力してください'); return; }
+  if(!_ocrImageBase64){ showOcrError('画像を選択してください'); return; }
+
+  if($('ocrSaveKey').checked) localStorage.setItem(GEMINI_KEY_STORAGE, apiKey);
+  else localStorage.removeItem(GEMINI_KEY_STORAGE);
+
+  $('ocrError').style.display = 'none';
+  $('ocrResultWrap').style.display = 'none';
+  $('ocrLoading').style.display = 'block';
+  $('ocrReadBtn').disabled = true;
+
+  const prompt = `この画像は手書きの家計簿です。全ての支出項目を読み取り、以下のJSON配列のみ返してください（余計な文章は不要）。
+日付はYYYY-MM-DD形式（年が書かれていない場合は今年 ${new Date().getFullYear()} 年として推定）。
+[{"date":"YYYY-MM-DD","category":"カテゴリ","store":"店名や備考","amount":金額数値}]
+カテゴリは食費/外食/日用品/交通/医療/衣類/娯楽/教育/光熱費/通信/その他 から最も近いものを選んでください。
+読み取れない部分はnullにしてください。`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          contents:[{parts:[
+            {text: prompt},
+            {inline_data:{mime_type: _ocrImageMime, data: _ocrImageBase64}}
+          ]}],
+          generationConfig:{temperature:0.1}
+        })
+      }
+    );
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const match = text.match(/\[[\s\S]*\]/);
+    if(!match) throw new Error('JSONが見つかりませんでした。もう一度試してください。');
+    const entries = JSON.parse(match[0]);
+    showOCRResults(entries);
+  } catch(e) {
+    showOcrError('エラー: ' + e.message);
+  } finally {
+    $('ocrLoading').style.display = 'none';
+    $('ocrReadBtn').disabled = false;
+  }
+}
+
+function showOcrError(msg){
+  $('ocrError').textContent = msg;
+  $('ocrError').style.display = 'block';
+  $('ocrLoading').style.display = 'none';
+  $('ocrReadBtn').disabled = false;
+}
+
+const OCR_CATEGORIES = ['食費','外食','日用品','交通','医療','衣類','娯楽','教育','光熱費','通信','その他'];
+
+function showOCRResults(entries){
+  if(!entries.length){ showOcrError('支出項目が見つかりませんでした'); return; }
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:#f0f0f0">
+      <th style="padding:4px;text-align:center">登録</th>
+      <th style="padding:4px;text-align:left">日付</th>
+      <th style="padding:4px;text-align:left">カテゴリ</th>
+      <th style="padding:4px;text-align:left">備考</th>
+      <th style="padding:4px;text-align:right">金額</th>
+    </tr></thead><tbody>`;
+  entries.forEach((e, i) => {
+    const catOpts = OCR_CATEGORIES.map(c => `<option value="${c}"${c===(e.category||'その他')?'selected':''}>${c}</option>`).join('');
+    html += `<tr data-idx="${i}" style="border-bottom:1px solid #eee">
+      <td style="padding:4px;text-align:center"><input type="checkbox" class="ocr-chk" checked></td>
+      <td style="padding:4px"><input type="date" class="ocr-date" value="${e.date||''}" style="font-size:12px;width:120px;border:1px solid #ccc;border-radius:4px;padding:2px"></td>
+      <td style="padding:4px"><select class="ocr-cat" style="font-size:12px;border:1px solid #ccc;border-radius:4px;padding:2px">${catOpts}</select></td>
+      <td style="padding:4px"><input type="text" class="ocr-store" value="${(e.store||'').replace(/"/g,'&quot;')}" style="font-size:12px;width:90px;border:1px solid #ccc;border-radius:4px;padding:2px"></td>
+      <td style="padding:4px;text-align:right"><input type="number" class="ocr-amount" value="${e.amount||''}" style="font-size:12px;width:70px;text-align:right;border:1px solid #ccc;border-radius:4px;padding:2px"></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  $('ocrResultTable').innerHTML = html;
+  $('ocrResultWrap').style.display = 'block';
+}
+
+function registerOCRResults(){
+  const rows = $('ocrResultTable').querySelectorAll('tr[data-idx]');
+  let count = 0;
+  rows.forEach(row => {
+    if(!row.querySelector('.ocr-chk').checked) return;
+    const date = row.querySelector('.ocr-date').value;
+    const category = row.querySelector('.ocr-cat').value;
+    const store = row.querySelector('.ocr-store').value.trim();
+    const amount = Number(row.querySelector('.ocr-amount').value);
+    if(!date || !amount || amount <= 0) return;
+    const entry = getDayEntry(date);
+    entry.purchases.push({category, store, amount});
+    setDayEntry(date, entry);
+    count++;
+  });
+  if(count === 0){ alert('登録する項目がありません'); return; }
+  alert(`✅ ${count}件を登録しました`);
+  closeOcrModal();
+  renderDay();
+}
 
 // ==================== Firebase ====================
 function generateRandomCode(){ const c='abcdefghijklmnopqrstuvwxyz0123456789';let r='';for(let i=0;i<12;i++){if(i>0&&i%4===0)r+='-';r+=c[Math.floor(Math.random()*c.length)];}return r; }
