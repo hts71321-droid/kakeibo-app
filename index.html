@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="家計簿">
@@ -26,7 +26,8 @@
     .card{background:white;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:14px}
     .card h2{margin:0 0 10px;font-size:1.05em;color:#34495e}
     label{display:block;font-size:0.85em;color:#666;margin:8px 0 4px}
-    input,select,textarea{width:100%;padding:10px;font-size:1em;border:1px solid #ddd;border-radius:8px;background:white;font-family:inherit;min-width:0}
+    input,select,textarea{width:100%;padding:10px;font-size:1em;border:1px solid #ddd;border-radius:8px;background:white;font-family:inherit;min-width:0;touch-action:manipulation}
+    button{touch-action:manipulation}
     input[type="date"]{-webkit-appearance:none;appearance:none;display:block}
     textarea{min-height:70px;resize:vertical}
     .btn{display:block;width:100%;color:white;border:none;padding:14px;font-size:1em;border-radius:10px;cursor:pointer;margin-top:12px;font-weight:600}
@@ -863,6 +864,37 @@ function renderMonthBudget(year,mIdx,varTotal){
     <div class="summary-row balance ${rem>=0?'positive':'negative'}" style="font-size:1em">
       <span>${rem>=0?'✅ 残り':'⚠️ オーバー'}</span><span>${rem>=0?'':'-'}${fmt(Math.abs(rem))} 円</span>
     </div>`;
+
+  // カテゴリ別予算内訳
+  const cb=b.categories||{};
+  const hasCatBudgets=Object.values(cb).some(v=>v>0);
+  if(hasCatBudgets){
+    const ms=new Date(year,mIdx-1,1),me=new Date(year,mIdx,0);
+    const cats=aggregateByCategory(ms,me);
+    const allCats=new Set([...Object.keys(cb).filter(k=>cb[k]>0),...Object.keys(cats)]);
+    html+=`<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px">
+      <div style="font-size:.8em;font-weight:700;color:#555;margin-bottom:8px">📂 カテゴリ別</div>`;
+    [...allCats].sort().forEach(cat=>{
+      const actual=cats[cat]||0, budget=cb[cat]||0;
+      if(!budget){
+        html+=`<div style="display:flex;justify-content:space-between;font-size:.85em;color:#888;margin-bottom:4px"><span>${cat}</span><span>${fmt(actual)}円 <span style="color:#bbb">（予算なし）</span></span></div>`;
+        return;
+      }
+      const p=Math.min(100,Math.round(actual/budget*100));
+      const c=p>=100?'#e74c3c':p>=80?'#e67e22':'#27ae60';
+      const r=budget-actual;
+      html+=`<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:.85em;margin-bottom:2px">
+          <span style="color:#444">${cat}</span>
+          <span style="font-weight:600">${fmt(actual)}<span style="color:#aaa;font-weight:400"> / ${fmt(budget)}円</span></span>
+        </div>
+        <div class="bbar"><div class="bbar-fill" style="width:${p}%;background:${c}"></div></div>
+        <div style="text-align:right;font-size:.75em;color:${r>=0?'#27ae60':'#e74c3c'}">${r>=0?`残 ${fmt(r)}円`:`⚠️ 超過 ${fmt(-r)}円`}</div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+
   $('monthBudgetSummary').innerHTML=html;
 }
 
