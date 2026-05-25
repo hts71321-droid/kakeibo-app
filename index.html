@@ -748,7 +748,14 @@ $('addBtn').addEventListener('click',()=>{
     const d=new Date(date),ms=getMonthStart(d),me=getMonthEnd(d);
     const monthTotal=aggregatePeriodTotal(ms,me);
     const eff=b.monthlyVariableDefault+computeCarryOver(d.getFullYear(),d.getMonth()+1);
-    if(monthTotal>eff){ alert(`⚠️ 月の予算を超えました！\n予算: ${fmt(eff)}円\n今月: ${fmt(monthTotal)}円\n超過: ${fmt(monthTotal-eff)}円`); }
+    if(monthTotal>eff){
+      const alertYm=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+      const shownYm=localStorage.getItem('kakeibo-budget-alerted');
+      if(shownYm!==alertYm){
+        localStorage.setItem('kakeibo-budget-alerted',alertYm);
+        alert(`⚠️ 月の予算を超えました！\n予算: ${fmt(eff)}円\n今月: ${fmt(monthTotal)}円\n超過: ${fmt(monthTotal-eff)}円\n\n（今月はこの警告を再表示しません）`);
+      }
+    }
   }
 });
 $('saveMemoBtn').addEventListener('click',()=>{ const date=$('dateInput').value,entry=getDayEntry(date); entry.memo=$('memoInput').value; setDayEntry(date,entry); alert('メモを保存しました ✅'); });
