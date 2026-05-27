@@ -1172,6 +1172,23 @@ function renderSpecialSub(){
     </div>`).join('');
 }
 
+// 特別出費追加ハンドラ
+document.addEventListener('DOMContentLoaded',()=>{});  // placeholder, handlers below
+$('addSpecialTxBtn') && $('addSpecialTxBtn').addEventListener('click',()=>{
+  const date=$('spDate').value,catId=$('spCat').value,label=$('spLabel').value.trim(),amount=Number($('spAmount').value),memo=$('spMemo').value.trim();
+  if(!date){alert('日付を入力してください');return;}
+  if(!catId){alert('大分類を選択してください');return;}
+  if(!label){alert('項目名を入力してください');return;}
+  if(!amount||amount<=0){alert('金額を入力してください');return;}
+  const meta=loadMeta();
+  if(!meta.specialExpenses.transactions) meta.specialExpenses.transactions=[];
+  meta.specialExpenses.transactions.push({id:genId(),categoryId:catId,date,label,amount,memo});
+  saveMeta(meta);
+  $('spLabel').value='';$('spAmount').value='';$('spMemo').value='';
+  renderSpecialSub();
+  alert('✅ 追加しました');
+});
+
 function renderBudgetSub(){
   const b=getBudget();
   $('budgetMonthlyInput').value=b.monthlyVariableDefault||'';
@@ -1249,7 +1266,7 @@ function addCategory(type){ const name=prompt('新しい大分類名を入力し
 function hasRecentHistory(fn){ const meta=loadMeta(),now=new Date(),cutoff=new Date(now.getFullYear(),now.getMonth()-11,1);const items=[...meta.incomes.items,...meta.fixedCosts.items,...meta.specialExpenses.items].filter(fn);for(const item of items)for(let m=1;m<=12;m++){if(getMonthAmount(item,m)>0){const dt=new Date(item.year,m-1,1);if(dt>=cutoff&&dt<=now)return true;}}return false; }
 function deletePerson(id){ const meta=loadMeta(),hh=hasRecentHistory(i=>i.personId===id),ic=meta.incomes.items.filter(i=>i.personId===id).length;if(hh){if(!confirm(`⚠️ 過去12ヶ月以内のデータがあります。${ic}件の収入が消えます。削除しますか？`))return;}else if(ic>0){if(!confirm(`${ic}件の収入があります。削除しますか？`))return;}else{if(!confirm('削除しますか？'))return;}meta.incomes.persons=meta.incomes.persons.filter(p=>p.id!==id);meta.incomes.items=meta.incomes.items.filter(i=>i.personId!==id);saveMeta(meta);renderRegular(); }
 function deleteFixedCat(id){ const meta=loadMeta(),hh=hasRecentHistory(i=>i.categoryId===id),ic=meta.fixedCosts.items.filter(i=>i.categoryId===id).length;if(hh){if(!confirm(`⚠️ 過去12ヶ月以内のデータがあります。${ic}件の項目が消えます。削除しますか？`))return;}else if(ic>0){if(!confirm(`${ic}件の項目があります。削除しますか？`))return;}else{if(!confirm('削除しますか？'))return;}meta.fixedCosts.categories=meta.fixedCosts.categories.filter(c=>c.id!==id);meta.fixedCosts.items=meta.fixedCosts.items.filter(i=>i.categoryId!==id);saveMeta(meta);renderRegular(); }
-function deleteSpecialCat(id){ const meta=loadMeta(),hh=hasRecentHistory(i=>i.categoryId===id),ic=meta.specialExpenses.items.filter(i=>i.categoryId===id).length;if(hh){if(!confirm(`⚠️ 過去12ヶ月以内のデータがあります。${ic}件の項目が消えます。削除しますか？`))return;}else if(ic>0){if(!confirm(`${ic}件の項目があります。削除しますか？`))return;}else{if(!confirm('削除しますか？'))return;}meta.specialExpenses.categories=meta.specialExpenses.categories.filter(c=>c.id!==id);meta.specialExpenses.items=meta.specialExpenses.items.filter(i=>i.categoryId!==id);saveMeta(meta);renderRegular(); }
+function deleteSpecialCat(id){ const meta=loadMeta();const ic=(meta.specialExpenses.items||[]).filter(i=>i.categoryId===id).length+(meta.specialExpenses.transactions||[]).filter(t=>t.categoryId===id).length;if(ic>0){if(!confirm(`${ic}件の記録があります。削除しますか？`))return;}else{if(!confirm('削除しますか？'))return;}meta.specialExpenses.categories=meta.specialExpenses.categories.filter(c=>c.id!==id);meta.specialExpenses.items=(meta.specialExpenses.items||[]).filter(i=>i.categoryId!==id);meta.specialExpenses.transactions=(meta.specialExpenses.transactions||[]).filter(t=>t.categoryId!==id);saveMeta(meta);renderRegular(); }
 function renameEntity(type,id){ const meta=loadMeta();let t;if(type==='person')t=meta.incomes.persons.find(p=>p.id===id);else if(type==='fixed-cat')t=meta.fixedCosts.categories.find(c=>c.id===id);else if(type==='special-cat')t=meta.specialExpenses.categories.find(c=>c.id===id);if(!t)return;const n=prompt('新しい名前を入力してください',t.name);if(!n?.trim())return;t.name=n.trim();saveMeta(meta);renderRegular(); }
 function moveEntity(type,id,dir){ const meta=loadMeta();let list;if(type==='person')list=meta.incomes.persons;else if(type==='fixed-cat')list=meta.fixedCosts.categories;else if(type==='special-cat')list=meta.specialExpenses.categories;else if(type==='income-item')list=meta.incomes.items.filter(i=>i.year===currentRegularYear);else if(type==='fixed-item')list=meta.fixedCosts.items.filter(i=>i.year===currentRegularYear);else if(type==='special-item')list=meta.specialExpenses.items.filter(i=>i.year===currentRegularYear);if(!list)return;const item=list.find(x=>x.id===id);if(!item)return;let scope=list;if(type==='income-item')scope=list.filter(i=>i.personId===item.personId);else if(type==='fixed-item'||type==='special-item')scope=list.filter(i=>i.categoryId===item.categoryId);scope.sort((a,b)=>a.order-b.order);const idx=scope.findIndex(x=>x.id===id),si=dir==='up'?idx-1:idx+1;if(si<0||si>=scope.length)return;const tmp=scope[idx].order;scope[idx].order=scope[si].order;scope[si].order=tmp;saveMeta(meta);renderRegular(); }
 function deleteItem(type,itemId){ const meta=loadMeta();let list;if(type==='income-item')list=meta.incomes.items;else if(type==='fixed-item')list=meta.fixedCosts.items;else if(type==='special-item')list=meta.specialExpenses.items;if(!list)return;const item=list.find(i=>i.id===itemId);if(!item)return;const hh=hasRecentHistory(i=>i.id===itemId);if(hh){if(!confirm('⚠️ 過去12ヶ月以内のデータがあります。削除しますか？'))return;}else{if(!confirm('削除しますか？'))return;}const f=list.filter(i=>i.id!==itemId);if(type==='income-item')meta.incomes.items=f;else if(type==='fixed-item')meta.fixedCosts.items=f;else if(type==='special-item')meta.specialExpenses.items=f;saveMeta(meta);renderRegular(); }
@@ -1257,7 +1274,23 @@ function deleteItem(type,itemId){ const meta=loadMeta();let list;if(type==='inco
 // ==================== グローバルクリック ====================
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);renderDay(); }
+  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);clearDayForm();renderDay(); }
+  if(t.dataset.editI!==undefined){
+    const i=Number(t.dataset.editI),date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[i];
+    if(!p)return;
+    if(_editingIdx===i){ clearDayForm(); renderDay(); return; }
+    _editingIdx=i;
+    const isCustom=p.isCustom&&!['食費','外食','日用品','交通費','娯楽費','衣服費','美容費','医療費','教育費','車関係'].includes(p.category);
+    if(isCustom){ $('catInput').value='その他'; $('customCatRow').style.display='block'; $('customCatInput').value=p.category; }
+    else { $('catInput').value=p.category; $('customCatRow').style.display='none'; }
+    $('storeInput').value=p.store||'';
+    $('amountInput').value=p.amount;
+    $('addBtn').textContent='更新';
+    $('cancelEditBtn').style.display='block';
+    renderDay();
+    $('addBtn').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
   const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;switchTab('day');return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);switchTab('week');return;}
   if(t.id==='addPersonBtn') addPerson();
@@ -1275,6 +1308,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.delIncomeItem) deleteItem('income-item',t.dataset.delIncomeItem);
   if(t.dataset.delFixedItem) deleteItem('fixed-item',t.dataset.delFixedItem);
   if(t.dataset.delSpecialItem) deleteItem('special-item',t.dataset.delSpecialItem);
+  if(t.dataset.delSpecialTx){ if(!confirm('この特別出費を削除しますか？'))return; const meta=loadMeta(); meta.specialExpenses.transactions=(meta.specialExpenses.transactions||[]).filter(t=>t.id!==e.target.dataset.delSpecialTx); saveMeta(meta); renderSpecialSub(); }
   if(t.dataset.rename) renameEntity(t.dataset.rename,t.dataset.id);
   if(t.dataset.move) moveEntity(t.dataset.move,t.dataset.id,t.dataset.dir);
   if(t.dataset.delCc){
@@ -1293,8 +1327,10 @@ document.addEventListener('click',e=>{
     $('calcExpr').textContent = calcExpr;
   }
 
-  function openCalc(){
-    const cur = Number($('amountInput').value);
+  let _calcTarget = 'amountInput';
+  function openCalc(targetId){
+    _calcTarget = targetId || 'amountInput';
+    const cur = Number($(targetId||'amountInput').value);
     calcVal = cur > 0 ? String(cur) : '0';
     calcExpr = ''; calcOp = null; calcNewNum = true;
     $('calcModal').style.display = 'flex';
@@ -1303,7 +1339,8 @@ document.addEventListener('click',e=>{
   }
   function closeCalc(){ $('calcModal').style.display = 'none'; document.body.style.overflow = ''; }
 
-  $('calcOpenBtn').addEventListener('click', openCalc);
+  $('calcOpenBtn').addEventListener('click', ()=>openCalc('amountInput'));
+  $('spCalcBtn') && $('spCalcBtn').addEventListener('click', ()=>openCalc('spAmount'));
   $('calcCancelBtn').addEventListener('click', closeCalc);
   $('calcModal').addEventListener('click', e => { if(e.target === $('calcModal')) closeCalc(); });
 
@@ -1328,7 +1365,7 @@ document.addEventListener('click',e=>{
       }
       // 計算あり・なしどちらでも金額欄に反映して閉じる
       const result = Math.round(parseFloat(calcVal));
-      if(result > 0) $('amountInput').value = result;
+      if(result > 0) $(_calcTarget).value = result;
       updateDisplay();
       setTimeout(closeCalc, 300);
       return;
