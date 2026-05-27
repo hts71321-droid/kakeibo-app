@@ -1172,12 +1172,11 @@ function renderSpecialSub(){
     </div>`).join('');
 }
 
-// 特別出費追加ハンドラ
-document.addEventListener('DOMContentLoaded',()=>{});  // placeholder, handlers below
-$('addSpecialTxBtn') && $('addSpecialTxBtn').addEventListener('click',()=>{
+// 特別出費追加ハンドラ（グローバルデリゲーションで確実に動作）
+function handleAddSpecialTx(){
   const date=$('spDate').value,catId=$('spCat').value,label=$('spLabel').value.trim(),amount=Number($('spAmount').value),memo=$('spMemo').value.trim();
   if(!date){alert('日付を入力してください');return;}
-  if(!catId){alert('大分類を選択してください');return;}
+  if(!catId){alert('大分類を先に追加・選択してください');return;}
   if(!label){alert('項目名を入力してください');return;}
   if(!amount||amount<=0){alert('金額を入力してください');return;}
   const meta=loadMeta();
@@ -1186,8 +1185,9 @@ $('addSpecialTxBtn') && $('addSpecialTxBtn').addEventListener('click',()=>{
   saveMeta(meta);
   $('spLabel').value='';$('spAmount').value='';$('spMemo').value='';
   renderSpecialSub();
-  alert('✅ 追加しました');
-});
+  const btn=$('addSpecialTxBtn');
+  if(btn){btn.textContent='✅ 追加しました';btn.style.background='#27ae60';setTimeout(()=>{btn.textContent='追加';btn.style.background='';},1500);}
+}
 
 function renderBudgetSub(){
   const b=getBudget();
@@ -1296,6 +1296,7 @@ document.addEventListener('click',e=>{
   if(t.id==='addPersonBtn') addPerson();
   if(t.id==='addFixedCatBtn') addCategory('fixed');
   if(t.id==='addSpecialCatBtn') addCategory('special');
+  if(t.id==='addSpecialTxBtn'){ handleAddSpecialTx(); return; }
   if(t.dataset.addIncome) openModal({type:'income',itemId:null,ownerId:t.dataset.addIncome});
   if(t.dataset.addFixed) openModal({type:'fixed',itemId:null,ownerId:t.dataset.addFixed});
   if(t.dataset.addSpecial) openModal({type:'special',itemId:null,ownerId:t.dataset.addSpecial});
@@ -1308,7 +1309,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.delIncomeItem) deleteItem('income-item',t.dataset.delIncomeItem);
   if(t.dataset.delFixedItem) deleteItem('fixed-item',t.dataset.delFixedItem);
   if(t.dataset.delSpecialItem) deleteItem('special-item',t.dataset.delSpecialItem);
-  if(t.dataset.delSpecialTx){ if(!confirm('この特別出費を削除しますか？'))return; const meta=loadMeta(); meta.specialExpenses.transactions=(meta.specialExpenses.transactions||[]).filter(t=>t.id!==e.target.dataset.delSpecialTx); saveMeta(meta); renderSpecialSub(); }
+  if(t.dataset.delSpecialTx){ if(!confirm('この特別出費を削除しますか？'))return; const txId=t.dataset.delSpecialTx; const meta=loadMeta(); meta.specialExpenses.transactions=(meta.specialExpenses.transactions||[]).filter(tx=>tx.id!==txId); saveMeta(meta); renderSpecialSub(); }
   if(t.dataset.rename) renameEntity(t.dataset.rename,t.dataset.id);
   if(t.dataset.move) moveEntity(t.dataset.move,t.dataset.id,t.dataset.dir);
   if(t.dataset.delCc){
