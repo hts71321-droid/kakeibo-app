@@ -658,19 +658,15 @@ function renderBreakdown(listEl,items){
 function renderCategoryWithBudget(listEl,cats){
   const b=getBudget(), cb=b.categories||{};
   const hasBudgets=Object.values(cb).some(v=>v>0);
-  // 予算登録の順番に合わせてソート（予算あり→予算なし、各グループ内は金額降順）
+  // 予算登録画面と同じ順番
   const stdCats=['食費','外食','日用品','交通費','娯楽費','衣服費','美容費','医療費','教育費','車関係'];
   const budgetOrder=[...stdCats,...Object.keys(cb).filter(k=>!stdCats.includes(k))];
   const keys=Object.keys(cats).sort((a,z)=>{
     const ai=budgetOrder.indexOf(a), zi=budgetOrder.indexOf(z);
-    if(hasBudgets){
-      const ab=cb[a]>0, zb=cb[z]>0;
-      if(ab!==zb) return ab?-1:1; // 予算あり優先
-    }
-    if(ai>=0&&zi>=0) return ai-zi; // 両方登録順
-    if(ai>=0) return -1;           // aだけ登録順
-    if(zi>=0) return 1;            // zだけ登録順
-    return cats[z]-cats[a];        // どちらも未登録は金額降順
+    if(ai>=0&&zi>=0) return ai-zi;
+    if(ai>=0) return -1;
+    if(zi>=0) return 1;
+    return a.localeCompare(z,'ja');
   });
   if(!keys.length){ listEl.innerHTML='<li class="empty">データなし</li>'; return; }
   listEl.innerHTML=keys.map(cat=>{
