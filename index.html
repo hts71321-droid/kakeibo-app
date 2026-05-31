@@ -688,6 +688,7 @@ function renderCategoryWithBudget(listEl,cats){
 
 function getMonthAmount(item,mIdx){ return Number(item.months?.[pad(mIdx)]||0); }
 function getItemYearTotal(item){ return Object.values(item.months||{}).reduce((s,v)=>s+Number(v||0),0); }
+function getItemMonthAvg(item){ const vals=Object.values(item.months||{}).map(Number).filter(v=>v>0); return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):0; }
 function getMonthIncomes(year,mIdx){
   const meta=loadMeta(),pm=Object.fromEntries(meta.incomes.persons.map(p=>[p.id,p]));
   return (meta.incomes.items||[]).filter(i=>i.year===year&&getMonthAmount(i,mIdx)>0)
@@ -1102,7 +1103,7 @@ function renderFixedSub(){
   $('fixedCategoriesList').innerHTML=cats.map(cat=>{
     const items=(meta.fixedCosts.items||[]).filter(i=>i.categoryId===cat.id&&i.year===currentRegularYear).sort((a,b)=>a.order-b.order);
     const total=items.reduce((s,i)=>s+getItemYearTotal(i),0);
-    const itemsHtml=!items.length?'<div class="empty">この年の項目はまだありません</div>':items.map(it=>`<div class="item-row"><div class="item-info"><div class="item-label">${it.label}${it.memo?` <span class="item-memo">(${it.memo})</span>`:''}</div><div class="item-sub">¥${fmt(getItemYearTotal(it))}/年</div></div><div class="item-actions">${reorderMode?`<button data-move="fixed-item" data-id="${it.id}" data-dir="up">↑</button><button data-move="fixed-item" data-id="${it.id}" data-dir="down">↓</button>`:''}<button class="primary" data-edit-fixed-item="${it.id}">12ヶ月入力</button><button class="del" data-del-fixed-item="${it.id}">×</button></div></div>`).join('');
+    const itemsHtml=!items.length?'<div class="empty">この年の項目はまだありません</div>':items.map(it=>{ const yr=getItemYearTotal(it),mo=getItemMonthAvg(it); return `<div class="item-row"><div class="item-info"><div class="item-label">${it.label}${it.memo?` <span class="item-memo">(${it.memo})</span>`:''}</div><div class="item-sub">${mo?`<span style="font-weight:600;color:#2c3e50">¥${fmt(mo)}/月</span> <span style="color:#aaa">¥${fmt(yr)}/年</span>`:`¥${fmt(yr)}/年`}</div></div><div class="item-actions">${reorderMode?`<button data-move="fixed-item" data-id="${it.id}" data-dir="up">↑</button><button data-move="fixed-item" data-id="${it.id}" data-dir="down">↓</button>`:''}<button class="primary" data-edit-fixed-item="${it.id}">12ヶ月入力</button><button class="del" data-del-fixed-item="${it.id}">×</button></div></div>`; }).join('');
     return `<div class="cat-card"><div class="cat-header"><div><div class="cat-name">📂 ${cat.name}</div><div class="cat-total">¥${fmt(total)}/年</div></div><div class="cat-actions">${reorderMode?`<button data-move="fixed-cat" data-id="${cat.id}" data-dir="up">↑</button><button data-move="fixed-cat" data-id="${cat.id}" data-dir="down">↓</button><button data-rename="fixed-cat" data-id="${cat.id}">名前変更</button><button class="del" data-del-fixed-cat="${cat.id}">削除</button>`:''}</div></div>${itemsHtml}<button class="btn btn-small btn-blue" data-add-fixed="${cat.id}">+ 項目を追加</button></div>`;
   }).join('');
 }
