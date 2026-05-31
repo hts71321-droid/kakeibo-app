@@ -754,7 +754,10 @@ function switchTab(name){
   if(name==='year') renderYear();
   if(name==='regular') renderRegular();
 }
-$$('.tab').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+$$('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+  if(btn.dataset.tab==='week'){ const dv=$('dateInput').value; if(dv){const[y,m,d]=dv.split('-').map(Number);weekAnchor=new Date(y,m-1,d);} }
+  switchTab(btn.dataset.tab);
+}));
 $$('.sub-tab').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const sub=btn.dataset.sub;
