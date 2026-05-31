@@ -603,12 +603,15 @@ function switchTab(name){
   $$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   $$('.tab-pane').forEach(p=>p.classList.toggle('active',p.id===`pane-${name}`));
   if(name==='day') renderDay();
-  if(name==='week'){ const dv=$('dateInput').value; if(dv){const[y,m,d]=dv.split('-').map(Number);weekAnchor=new Date(y,m-1,d);} renderWeek(); }
+  if(name==='week') renderWeek();
   if(name==='month') renderMonth();
   if(name==='year') renderYear();
   if(name==='regular') renderRegular();
 }
-$$('.tab').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+$$('.tab').forEach(btn=>btn.addEventListener('click',()=>{
+  if(btn.dataset.tab==='week'){ const dv=$('dateInput').value; if(dv){const[y,m,d]=dv.split('-').map(Number);weekAnchor=new Date(y,m-1,d);} }
+  switchTab(btn.dataset.tab);
+}));
 $$('.sub-tab').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const sub=btn.dataset.sub;
