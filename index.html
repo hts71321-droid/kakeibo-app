@@ -603,7 +603,7 @@ function switchTab(name){
   $$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   $$('.tab-pane').forEach(p=>p.classList.toggle('active',p.id===`pane-${name}`));
   if(name==='day') renderDay();
-  if(name==='week') renderWeek();
+  if(name==='week'){ const dv=$('dateInput').value; if(dv){const[y,m,d]=dv.split('-').map(Number);weekAnchor=new Date(y,m-1,d);} renderWeek(); }
   if(name==='month') renderMonth();
   if(name==='year') renderYear();
   if(name==='regular') renderRegular();
