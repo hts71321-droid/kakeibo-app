@@ -198,7 +198,10 @@
     </div>
     <div class="card">
       <h2>➕ 新規追加</h2>
-      <label for="catInput">カテゴリ</label>
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <label for="catInput">カテゴリ</label>
+        <button id="resetCatBtn" type="button" style="display:none;background:none;border:none;color:#aaa;font-size:.8em;padding:0;cursor:pointer;touch-action:manipulation">↺ リセット</button>
+      </div>
       <select id="catInput">
         <option>食費</option><option>外食</option><option>日用品</option>
         <option>交通費</option><option>娯楽費</option><option>衣服費</option>
@@ -779,13 +782,31 @@ function renderDay(){
   renderBreakdown($('dayCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
   $('memoInput').value=entry.memo||'';
 }
-$('dateInput').addEventListener('change',renderDay);
-$('catInput').addEventListener('change',()=>{ const isO=$('catInput').value==='その他'; $('customCatRow').style.display=isO?'block':'none'; if(isO){updateDatalist();$('customCatInput').focus();} });
+$('dateInput').addEventListener('change',()=>{ resetDayForm(); renderDay(); });
 function clearDayForm(){
-  $('storeInput').value='';$('amountInput').value='';$('customCatInput').value='';$('catInput').value='食費';$('customCatRow').style.display='none';
+  // 追加後：カテゴリはそのまま、店名・金額だけクリア
+  $('storeInput').value='';$('amountInput').value='';
   _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
+  updateResetCatBtn();
 }
-$('cancelEditBtn').addEventListener('click',()=>{ clearDayForm(); renderDay(); });
+function resetDayForm(){
+  // 完全リセット（編集キャンセル・日付変更時など）
+  $('storeInput').value='';$('amountInput').value='';$('customCatInput').value='';
+  $('catInput').value='食費';$('customCatRow').style.display='none';
+  _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
+  updateResetCatBtn();
+}
+function updateResetCatBtn(){
+  const isDefault=$('catInput').value==='食費'&&$('customCatInput').value==='';
+  $('resetCatBtn').style.display=isDefault?'none':'inline';
+}
+$('catInput').addEventListener('change',()=>{
+  const isO=$('catInput').value==='その他';$('customCatRow').style.display=isO?'block':'none';
+  if(isO){updateDatalist();$('customCatInput').focus();}
+  updateResetCatBtn();
+});
+$('resetCatBtn').addEventListener('click',()=>{ $('catInput').value='食費';$('customCatInput').value='';$('customCatRow').style.display='none';updateResetCatBtn(); });
+$('cancelEditBtn').addEventListener('click',()=>{ resetDayForm(); renderDay(); });
 $('addBtn').addEventListener('click',()=>{
   const date=$('dateInput').value; let category=$('catInput').value,isCustom=false;
   if(category==='その他'){ const c=$('customCatInput').value.trim(); if(!c){alert('カテゴリ名を入力してください');return;} category=c;isCustom=true; }
@@ -1253,7 +1274,7 @@ function deleteItem(type,itemId){ const meta=loadMeta();let list;if(type==='inco
 // ==================== グローバルクリック ====================
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);clearDayForm();renderDay(); }
+  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);resetDayForm();renderDay(); }
   if(t.dataset.editI!==undefined){
     const i=Number(t.dataset.editI),date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[i];
     if(!p)return;
