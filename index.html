@@ -628,7 +628,14 @@ function loadMeta(){
   if(_isFirebaseMode) raw=_metaData?JSON.parse(JSON.stringify(_metaData)):{};
   else{ try{ raw=JSON.parse(localStorage.getItem('kakeibo-meta-v1'))||{}; }catch{ raw={}; } }
   const needs=!raw.incomes||Array.isArray(raw.incomes)||!raw.fixedCosts||Array.isArray(raw.fixedCosts)||!raw.specialExpenses;
-  if(!needs) return raw;
+  if(!needs){
+    const norm=a=>Array.isArray(a)?a:(a?Object.values(a):[]);
+    if(raw.incomes) raw.incomes.items=norm(raw.incomes.items);
+    if(raw.incomes) raw.incomes.persons=norm(raw.incomes.persons);
+    if(raw.fixedCosts){ raw.fixedCosts.items=norm(raw.fixedCosts.items); raw.fixedCosts.categories=norm(raw.fixedCosts.categories); }
+    if(raw.specialExpenses){ raw.specialExpenses.items=norm(raw.specialExpenses.items); raw.specialExpenses.categories=norm(raw.specialExpenses.categories); raw.specialExpenses.transactions=norm(raw.specialExpenses.transactions); }
+    return raw;
+  }
   if(!_isFirebaseMode&&(Array.isArray(raw.incomes)||Array.isArray(raw.fixedCosts))) localStorage.setItem(BACKUP_KEY,JSON.stringify(raw));
   const fresh=makeDefaultMeta();
   fresh.weekMemo=raw.weekMemo||{}; fresh.monthMemo=raw.monthMemo||{}; fresh.yearMemo=raw.yearMemo||{};
