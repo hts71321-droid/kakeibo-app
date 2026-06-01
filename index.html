@@ -205,7 +205,7 @@
       <select id="catInput">
         <option>食費</option><option>外食</option><option>日用品</option>
         <option>交通費</option><option>娯楽費</option><option>衣類費</option>
-        <option>美容費</option><option>教育費</option><option>医療費</option><option>交際費</option>
+        <option>美容費</option><option>教育費</option><option>医療費</option><option>交際費</option><option>その他</option>
       </select>
       <div id="customCatRow" style="display:none">
         <label for="customCatInput">カテゴリ名</label>
@@ -1345,7 +1345,7 @@ document.addEventListener('click',e=>{
     showCatDetailModal(cn||'未分類',purchases,showDate);
     return;
   }
-  if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'){$('catDetailModal').style.display='none';return;}
+  if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'||t.id==='catDetailModal'){$('catDetailModal').style.display='none';return;}
   if(t.id==='addPersonBtn') addPerson();
   if(t.id==='addFixedCatBtn') addCategory('fixed');
   if(t.id==='addSpecialCatBtn') addCategory('special');
