@@ -1005,24 +1005,43 @@ function renderMonthComparison(year,mIdx){
   const cs=new Date(year,mIdx-1,1),ce=new Date(year,mIdx,0);
   const ps=new Date(py,pm-1,1),pe=new Date(py,pm,0);
   const curC=aggregateByCategory(cs,ce),prevC=aggregateByCategory(ps,pe);
-  const all=new Set([...Object.keys(curC),...Object.keys(prevC)]);
-  if(!all.size){ $('monthComparison').innerHTML='<div class="empty">前月のデータなし</div>'; return; }
-  const rows=[...all].map(cat=>({cat,cur:curC[cat]||0,prev:prevC[cat]||0,diff:(curC[cat]||0)-(prevC[cat]||0)})).sort((a,b)=>b.diff-a.diff);
-  const ct=Object.values(curC).reduce((s,v)=>s+v,0),pt=Object.values(prevC).reduce((s,v)=>s+v,0),td=ct-pt;
+  // 固定費カテゴリ別集計
+  const curFixed=getMonthFixed(year,mIdx),prevFixed=getMonthFixed(py,pm);
+  const sumByCat=items=>{const r={};items.forEach(i=>{if(!r[i.category])r[i.category]={total:0,order:i.catOrder};r[i.category].total+=i.amt;});return r;};
+  const curFix=sumByCat(curFixed),prevFix=sumByCat(prevFixed);
+  const fixCatMap={};[...curFixed,...prevFixed].forEach(i=>{if(!(i.category in fixCatMap))fixCatMap[i.category]=i.catOrder;});
+  const fixCats=Object.keys(fixCatMap).sort((a,b)=>(fixCatMap[a]||99)-(fixCatMap[b]||99));
+  // 変動支出行: STD_CATS固定順 → カスタム → 未分類
+  const varRows=[];
+  STD_CATS.forEach(c=>varRows.push({cat:c,cur:curC[c]||0,prev:prevC[c]||0}));
+  const allCust=new Set([...Object.keys(curC).filter(c=>c&&!STD_CATS.includes(c)),...Object.keys(prevC).filter(c=>c&&!STD_CATS.includes(c))]);
+  allCust.forEach(c=>varRows.push({cat:c,cur:curC[c]||0,prev:prevC[c]||0}));
+  const emptyC={cur:curC['']||0,prev:prevC['']||0};
+  if(emptyC.cur>0||emptyC.prev>0) varRows.push({cat:'⚠️ 未分類',cur:emptyC.cur,prev:emptyC.prev});
+  varRows.forEach(r=>r.diff=r.cur-r.prev);
+  const ct=varRows.reduce((s,r)=>s+r.cur,0),pt=varRows.reduce((s,r)=>s+r.prev,0),td=ct-pt;
+  const fixRows=fixCats.map(c=>({cat:c,cur:curFix[c]?.total||0,prev:prevFix[c]?.total||0,diff:(curFix[c]?.total||0)-(prevFix[c]?.total||0)}));
+  const cf=fixRows.reduce((s,r)=>s+r.cur,0),pf=fixRows.reduce((s,r)=>s+r.prev,0),df=cf-pf;
+  const hasVarData=varRows.some(r=>r.cur>0||r.prev>0);
+  if(!hasVarData&&!fixCats.length){$('monthComparison').innerHTML='<div class="empty">前月のデータなし</div>';return;}
+  const rowHtml=r=>{const dim=r.cur===0&&r.prev===0?' style="opacity:.35"':'';return `<div${dim}>${r.cat}</div><div class="cmp-r"${dim} style="font-weight:600">${fmt(r.cur)}</div><div class="cmp-r"${dim} style="color:#aaa">${fmt(r.prev)}</div><div class="cmp-r ${r.diff>0?'cmp-up':r.diff<0?'cmp-down':'cmp-neu'}"${dim}>${r.diff>0?'+':''}${fmt(r.diff)}${r.diff>0?' ↑':r.diff<0?' ↓':''}</div>`;};
+  const totRow=(c,p)=>{const d=c-p;return `<div class="cmp-total" style="font-weight:700">合計</div><div class="cmp-total cmp-r" style="font-weight:700">${fmt(c)}</div><div class="cmp-total cmp-r" style="color:#aaa">${fmt(p)}</div><div class="cmp-total cmp-r ${d>0?'cmp-up':d<0?'cmp-down':'cmp-neu'}">${d>0?'+':''}${fmt(d)}${d>0?' ↑':d<0?' ↓':''}</div>`;};
   $('monthComparison').innerHTML=`
-    <div style="font-size:.8em;color:#888;margin-bottom:8px">${py}年${pm}月 → ${year}年${mIdx}月</div>
+    <div style="font-size:.8em;color:#888;margin-bottom:6px">${py}年${pm}月 → ${year}年${mIdx}月</div>
+    <div style="font-size:.8em;color:#555;font-weight:600;margin-bottom:3px">📊 変動支出</div>
     <div class="cmp-table col4">
       <div class="cmp-hd">カテゴリ</div><div class="cmp-hd cmp-r">今月</div><div class="cmp-hd cmp-r">先月</div><div class="cmp-hd cmp-r">差</div>
-      ${rows.map(r=>`
-        <div style="color:#555">${r.cat}</div>
-        <div class="cmp-r" style="font-weight:600">${fmt(r.cur)}</div>
-        <div class="cmp-r" style="color:#aaa">${fmt(r.prev)}</div>
-        <div class="cmp-r ${r.diff>0?'cmp-up':r.diff<0?'cmp-down':'cmp-neu'}">${r.diff>0?'+':''}${fmt(r.diff)}${r.diff>0?' ↑':r.diff<0?' ↓':''}</div>`).join('')}
-      <div class="cmp-total" style="font-weight:700">合計</div>
-      <div class="cmp-total cmp-r" style="font-weight:700">${fmt(ct)}</div>
-      <div class="cmp-total cmp-r" style="color:#aaa">${fmt(pt)}</div>
-      <div class="cmp-total cmp-r ${td>0?'cmp-up':td<0?'cmp-down':'cmp-neu'}">${td>0?'+':''}${fmt(td)}${td>0?' ↑':td<0?' ↓':''}</div>
-    </div>`;
+      ${varRows.map(rowHtml).join('')}
+      ${totRow(ct,pt)}
+    </div>
+    ${fixCats.length?`
+    <div style="font-size:.8em;color:#555;font-weight:600;margin:10px 0 3px">📌 固定費</div>
+    <div class="cmp-table col4">
+      <div class="cmp-hd">カテゴリ</div><div class="cmp-hd cmp-r">今月</div><div class="cmp-hd cmp-r">先月</div><div class="cmp-hd cmp-r">差</div>
+      ${fixRows.map(rowHtml).join('')}
+      ${totRow(cf,pf)}
+    </div>`:''}
+  `;
 }
 
 // ==================== クレカメモ ====================
