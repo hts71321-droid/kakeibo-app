@@ -323,7 +323,7 @@
       <ul id="weekDayList" class="breakdown-list"></ul>
       <div class="total" id="weekTotal">週合計: 0 円</div>
     </div>
-    <div class="card"><h2>📊 カテゴリ別合計</h2><ul id="weekCategoryList" class="breakdown-list"></ul></div>
+    <div class="card"><h2>📊 カテゴリ別合計</h2><ul id="weekCategoryList" class="breakdown-list"></ul><div class="total" id="weekCatTotal"></div></div>
     <div class="card">
       <h2>📝 週の備考</h2>
       <textarea id="weekMemo" placeholder="この週のメモ..."></textarea>
@@ -854,7 +854,9 @@ function renderWeek(){
   renderBreakdown($('weekDayList'),dayItems);
   $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
   const cats=aggregateByCategory(start,end);
+  const catTotal=Object.values(cats).reduce((s,v)=>s+v,0);
   renderBreakdown($('weekCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
+  $('weekCatTotal').textContent=catTotal>0?`カテゴリ合計: ${fmt(catTotal)} 円`:'';
   $('weekMemo').value=loadMeta().weekMemo[formatYMD(start)]||'';
 }
 $('weekPrev').addEventListener('click',()=>{weekAnchor=addDays(weekAnchor,-7);renderWeek();});
