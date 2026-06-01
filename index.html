@@ -60,7 +60,7 @@
     .breakdown-list{list-style:none;padding:0;margin:0}
     .breakdown-item{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #eee;font-size:0.95em}
     .breakdown-item:last-child{border-bottom:none}
-    .breakdown-item[data-jump],.breakdown-item[data-jump-week]{cursor:pointer}
+    .breakdown-item[data-jump],.breakdown-item[data-jump-week],.breakdown-item[data-cat-detail]{cursor:pointer}
     .breakdown-label{color:#555}.breakdown-amount{font-weight:600;color:#2c3e50}
     .summary-row{display:flex;justify-content:space-between;padding:6px 0;font-size:1em}
     .summary-sub{display:flex;justify-content:space-between;padding:2px 0 2px 16px;font-size:0.85em;color:#888}
@@ -204,9 +204,8 @@
       </div>
       <select id="catInput">
         <option>食費</option><option>外食</option><option>日用品</option>
-        <option>交通費</option><option>娯楽費</option><option>衣服費</option>
-        <option>美容費</option><option>医療費</option><option>教育費</option>
-        <option>車関係</option><option>その他</option>
+        <option>交通費</option><option>娯楽費</option><option>衣類費</option>
+        <option>美容費</option><option>教育費</option><option>医療費</option><option>交際費</option>
       </select>
       <div id="customCatRow" style="display:none">
         <label for="customCatInput">カテゴリ名</label>
@@ -516,6 +515,20 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="catDetailModal" style="display:none">
+    <div class="modal-content" style="display:flex;flex-direction:column;max-height:80vh;padding-bottom:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 id="catDetailTitle" style="margin:0;font-size:1.05em"></h2>
+        <button id="catDetailCloseTop" style="background:none;border:none;font-size:1.4em;cursor:pointer;padding:4px;touch-action:manipulation">✕</button>
+      </div>
+      <ul id="catDetailList" class="breakdown-list" style="overflow-y:auto;flex:1;margin:0 -20px;padding:0 20px"></ul>
+      <div class="modal-footer">
+        <div id="catDetailTotal" style="text-align:right;font-weight:600;margin-bottom:8px;color:#2c3e50"></div>
+        <button id="catDetailCloseBtn" class="btn btn-gray" style="margin-top:0">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== 12ヶ月入力モーダル ========== -->
   <div class="modal-overlay" id="monthInputModal" style="display:none">
     <div class="modal-content">
@@ -581,6 +594,7 @@ function getWeekStart(d){ d=new Date(d); const day=d.getDay(); const diff=day===
 const getMonthStart = d => new Date(d.getFullYear(),d.getMonth(),1);
 const getMonthEnd   = d => new Date(d.getFullYear(),d.getMonth()+1,0);
 const WEEK_DAYS = ['日','月','火','水','木','金','土'];
+const STD_CATS=['食費','外食','日用品','交通費','娯楽費','衣類費','美容費','教育費','医療費','交際費'];
 
 // ==================== データ操作 ====================
 function loadDayData(){
@@ -639,7 +653,7 @@ function aggregateByCategory(s,e){
   const data=loadDayData(),res={};
   const ss=formatYMD(s),ee=formatYMD(e);
   Object.keys(data).forEach(date=>{
-    if(date>=ss&&date<=ee)(data[date].purchases||[]).forEach(p=>{ res[p.category]=(res[p.category]||0)+Number(p.amount||0); });
+    if(date>=ss&&date<=ee)(data[date].purchases||[]).forEach(p=>{ const c=p.category||''; res[c]=(res[c]||0)+Number(p.amount||0); });
   });
   return res;
 }
@@ -648,37 +662,42 @@ function getDayTotal(date){ return getDayEntry(date).purchases.reduce((s,p)=>s+N
 function getCustomCategories(){ const data=loadDayData(),set=new Set(); Object.values(data).forEach(e=>(e.purchases||[]).forEach(p=>{ if(p.isCustom&&p.category) set.add(p.category); })); return Array.from(set).sort(); }
 function updateDatalist(){ $('customCatList').innerHTML=getCustomCategories().map(c=>`<option value="${c}">`).join(''); }
 
+function sortedCatItems(cats){
+  const items=[];
+  STD_CATS.forEach(c=>items.push({label:c,amount:cats[c]||0,catDetail:c}));
+  Object.keys(cats).forEach(c=>{ if(c&&!STD_CATS.includes(c)&&Number(cats[c])>0) items.push({label:c,amount:cats[c],catDetail:c}); });
+  const uAmt=Number(cats['']||0); if(uAmt>0) items.push({label:'⚠️ 未分類',amount:uAmt,catDetail:''});
+  return items;
+}
 function renderBreakdown(listEl,items){
   if(!items.length){ listEl.innerHTML='<li class="empty">データなし</li>'; return; }
   listEl.innerHTML=items.map(item=>{
     let ja='';
     if(item.jump) ja=`data-jump="${item.jump}"`;
     else if(item.jumpWeek) ja=`data-jump-week="${item.jumpWeek}"`;
-    return `<li class="breakdown-item" ${ja}><span class="breakdown-label">${item.label}</span><span class="breakdown-amount">${fmt(item.amount)}円</span></li>`;
+    else if(item.catDetail!==undefined) ja=`data-cat-detail="${item.catDetail}"`;
+    const dimmed=item.amount===0?' style="color:#ccc"':'';
+    return `<li class="breakdown-item" ${ja}><span class="breakdown-label"${dimmed}>${item.label}</span><span class="breakdown-amount"${dimmed}>${fmt(item.amount)}円</span></li>`;
   }).join('');
 }
 
 function renderCategoryWithBudget(listEl,cats){
   const b=getBudget(), cb=b.categories||{};
   const hasBudgets=Object.values(cb).some(v=>v>0);
-  // 予算登録画面と同じ順番
-  const stdCats=['食費','外食','日用品','交通費','娯楽費','衣服費','美容費','医療費','教育費','車関係'];
-  const budgetOrder=[...stdCats,...Object.keys(cb).filter(k=>!stdCats.includes(k))];
-  const keys=Object.keys(cats).sort((a,z)=>{
-    const ai=budgetOrder.indexOf(a), zi=budgetOrder.indexOf(z);
-    if(ai>=0&&zi>=0) return ai-zi;
-    if(ai>=0) return -1;
-    if(zi>=0) return 1;
-    return a.localeCompare(z,'ja');
-  });
-  if(!keys.length){ listEl.innerHTML='<li class="empty">データなし</li>'; return; }
-  listEl.innerHTML=keys.map(cat=>{
-    const actual=cats[cat], budget=cb[cat]||0;
-    if(!hasBudgets||!budget) return `<li class="breakdown-item"><span class="breakdown-label">${cat}</span><span class="breakdown-amount">${fmt(actual)}円</span></li>`;
+  const allKeys=[];
+  STD_CATS.forEach(c=>allKeys.push(c));
+  Object.keys(cats).forEach(c=>{ if(c&&!STD_CATS.includes(c)&&Number(cats[c])>0) allKeys.push(c); });
+  const uAmt=Number(cats['']||0);
+  listEl.innerHTML=allKeys.map(cat=>{
+    const actual=cats[cat]||0, budget=cb[cat]||0;
+    const dimmed=actual===0&&!budget?' style="opacity:.35"':'';
+    if(!hasBudgets||!budget){
+      return `<li class="breakdown-item" data-cat-detail="${cat}"${dimmed}><span class="breakdown-label">${cat}</span><span class="breakdown-amount">${fmt(actual)}円</span></li>`;
+    }
     const pct=Math.min(100,Math.round(actual/budget*100));
     const col=pct>=100?'#e74c3c':pct>=80?'#e67e22':'#27ae60';
     const rem=budget-actual;
-    return `<li class="breakdown-item" style="flex-direction:column;align-items:stretch;gap:3px">
+    return `<li class="breakdown-item" data-cat-detail="${cat}" style="flex-direction:column;align-items:stretch;gap:3px">
       <div style="display:flex;justify-content:space-between">
         <span class="breakdown-label">${cat}</span>
         <span style="font-weight:600">${fmt(actual)}<span style="color:#aaa;font-size:.85em"> / ${fmt(budget)}円</span></span>
@@ -686,7 +705,8 @@ function renderCategoryWithBudget(listEl,cats){
       <div class="bbar"><div class="bbar-fill" style="width:${pct}%;background:${col}"></div></div>
       <div style="font-size:.77em;text-align:right;color:${rem>=0?'#27ae60':'#e74c3c'}">${rem>=0?`残 ${fmt(rem)}円`:`超 ${fmt(-rem)}円`}</div>
     </li>`;
-  }).join('');
+  }).join('')+(uAmt>0?`<li class="breakdown-item" data-cat-detail=""><span class="breakdown-label">⚠️ 未分類</span><span class="breakdown-amount">${fmt(uAmt)}円</span></li>`:'');
+  if(!listEl.innerHTML) listEl.innerHTML='<li class="empty">データなし</li>';
 }
 
 function getMonthAmount(item,mIdx){ return Number(item.months?.[pad(mIdx)]||0); }
@@ -735,6 +755,16 @@ function updateSyncStatus(s){
   const m={synced:`✅ 同期済み（${_familyCode}）`,syncing:'🔄 同期中...',error:'⚠️ 接続エラー'};
   el.textContent=m[s]||s;
 }
+function showCatDetailModal(title,purchases,showDate){
+  const total=purchases.reduce((s,p)=>s+Number(p.amount||0),0);
+  $('catDetailTitle').textContent=`${title} の内訳`;
+  $('catDetailTotal').textContent=purchases.length?`合計: ${fmt(total)} 円`:'';
+  $('catDetailList').innerHTML=purchases.length?purchases.map(p=>{
+    const ds=showDate?`<span style="color:#888;font-size:.85em;margin-right:5px">${p.date.slice(5).replace('-','/')}</span>`:'';
+    return `<li class="breakdown-item"><span class="breakdown-label">${ds}${p.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(p.amount)}円</span></li>`;
+  }).join(''):'<li class="empty">データなし</li>';
+  $('catDetailModal').style.display='flex';
+}
 function renderCurrentTab(){
   if(_currentTab==='day') renderDay();
   else if(_currentTab==='week') renderWeek();
@@ -781,8 +811,8 @@ function renderDay(){
   });
   const total=entry.purchases.reduce((s,p)=>s+Number(p.amount||0),0);
   $('dayTotal').textContent=`日合計: ${fmt(total)} 円`;
-  const cats={}; entry.purchases.forEach(p=>{ cats[p.category]=(cats[p.category]||0)+Number(p.amount||0); });
-  renderBreakdown($('dayCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
+  const cats={}; entry.purchases.forEach(p=>{ const c=p.category||''; cats[c]=(cats[c]||0)+Number(p.amount||0); });
+  renderBreakdown($('dayCategoryList'),sortedCatItems(cats));
   $('memoInput').value=entry.memo||'';
 }
 $('dateInput').addEventListener('change',()=>{ resetDayForm(); renderDay(); });
@@ -855,7 +885,7 @@ function renderWeek(){
   $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
   const cats=aggregateByCategory(start,end);
   const catTotal=Object.values(cats).reduce((s,v)=>s+v,0);
-  renderBreakdown($('weekCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
+  renderBreakdown($('weekCategoryList'),sortedCatItems(cats));
   $('weekCatTotal').textContent=catTotal>0?`カテゴリ合計: ${fmt(catTotal)} 円`:'';
   $('weekMemo').value=loadMeta().weekMemo[formatYMD(start)]||'';
 }
@@ -1198,8 +1228,7 @@ function renderBudgetSub(){
   const b=getBudget();
   $('budgetMonthlyInput').value=b.monthlyVariableDefault||'';
   $('budgetCarryOver').checked=b.enableCarryOver||false;
-  const stdCats=['食費','外食','日用品','交通費','娯楽費','衣服費','美容費','医療費','教育費','車関係'];
-  const allCats=[...new Set([...stdCats,...getCustomCategories()])];
+  const allCats=[...new Set([...STD_CATS,...getCustomCategories()])];
   const cb=b.categories||{};
   $('categoryBudgetList').innerHTML=allCats.map(cat=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -1285,7 +1314,7 @@ document.addEventListener('click',e=>{
     if(!p)return;
     if(_editingIdx===i){ clearDayForm(); renderDay(); return; }
     _editingIdx=i;
-    const isCustom=p.isCustom&&!['食費','外食','日用品','交通費','娯楽費','衣服費','美容費','医療費','教育費','車関係'].includes(p.category);
+    const isCustom=p.isCustom&&!STD_CATS.includes(p.category);
     if(isCustom){ $('catInput').value='その他'; $('customCatRow').style.display='block'; $('customCatInput').value=p.category; }
     else { $('catInput').value=p.category; $('customCatRow').style.display='none'; }
     $('storeInput').value=p.store||'';
@@ -1298,6 +1327,25 @@ document.addEventListener('click',e=>{
   }
   const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;switchTab('day');return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);switchTab('week');return;}
+  const cdEl=t.closest('[data-cat-detail]');
+  if(cdEl){
+    const cn=cdEl.dataset.catDetail;
+    let purchases=[],showDate=true;
+    if(cdEl.closest('#pane-day')){
+      showDate=false;
+      const ds=$('dateInput').value;
+      purchases=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).map(p=>({date:ds,store:p.store||'',amount:p.amount}));
+    } else if(cdEl.closest('#pane-week')){
+      const ws=getWeekStart(weekAnchor);
+      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d);getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date:ds,store:p.store||'',amount:p.amount}));}
+    } else if(cdEl.closest('#pane-month')){
+      const ms=getMonthStart(monthAnchor),me=getMonthEnd(monthAnchor),ss=formatYMD(ms),ee=formatYMD(me),data=loadDayData();
+      Object.keys(data).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{getDayEntry(date).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));});
+    }
+    showCatDetailModal(cn||'未分類',purchases,showDate);
+    return;
+  }
+  if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'){$('catDetailModal').style.display='none';return;}
   if(t.id==='addPersonBtn') addPerson();
   if(t.id==='addFixedCatBtn') addCategory('fixed');
   if(t.id==='addSpecialCatBtn') addCategory('special');
