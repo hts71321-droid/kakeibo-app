@@ -684,7 +684,8 @@ function renderBreakdown(listEl,items){
     else if(item.jumpWeek) ja=`data-jump-week="${item.jumpWeek}"`;
     else if(item.catDetail!==undefined) ja=`data-cat-detail="${item.catDetail}"`;
     const dimmed=item.amount===0?' style="color:#ccc"':'';
-    return `<li class="breakdown-item" ${ja}><span class="breakdown-label"${dimmed}>${item.label}</span><span class="breakdown-amount"${dimmed}>${fmt(item.amount)}円</span></li>`;
+    const memoHtml=item.memo?`<span style="display:block;font-size:.75em;color:#aaa;font-style:italic;margin-top:1px">${item.memo}</span>`:'';
+    return `<li class="breakdown-item" ${ja}><span class="breakdown-label"${dimmed}>${item.label}${memoHtml}</span><span class="breakdown-amount"${dimmed}>${fmt(item.amount)}円</span></li>`;
   }).join('');
 }
 
@@ -887,7 +888,7 @@ function renderWeek(){
   const start=getWeekStart(weekAnchor),end=addDays(start,6);
   $('weekLabel').textContent=`${start.getMonth()+1}/${start.getDate()}(${WEEK_DAYS[start.getDay()]}) 〜 ${end.getMonth()+1}/${end.getDate()}(${WEEK_DAYS[end.getDay()]})`;
   const dayItems=[]; let weekTotal=0;
-  for(let i=0;i<7;i++){ const d=addDays(start,i),t=getDayTotal(formatYMD(d)); weekTotal+=t; dayItems.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:t,jump:formatYMD(d)}); }
+  for(let i=0;i<7;i++){ const d=addDays(start,i),ds=formatYMD(d),t=getDayTotal(ds),memo=getDayEntry(ds).memo||''; weekTotal+=t; dayItems.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:t,jump:ds,memo}); }
   renderBreakdown($('weekDayList'),dayItems);
   $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
   const cats=aggregateByCategory(start,end);
