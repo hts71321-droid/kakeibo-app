@@ -515,6 +515,20 @@
     </div>
   </div>
 
+  <!-- コード移行モーダル -->
+  <div class="modal-overlay" id="migrateCodeModal" style="display:none">
+    <div class="modal-content">
+      <h2 style="font-size:1.05em;margin-bottom:10px">家族コードの変更</h2>
+      <div style="font-size:.85em;color:#666;margin-bottom:14px">現在のコード: <strong id="migrateCurrentCode"></strong></div>
+      <label style="font-size:.85em;color:#555;display:block;margin-bottom:4px">新しいコード</label>
+      <input id="migrateNewCodeInput" type="text" placeholder="新しい家族コード" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:1em;margin-bottom:4px">
+      <div id="migrateError" style="color:#e74c3c;font-size:.8em;margin-bottom:10px;display:none"></div>
+      <button id="migrateWithDataBtn" class="btn btn-green" style="width:100%;margin-bottom:8px">データを引き継いで変更</button>
+      <button id="migrateWithoutDataBtn" class="btn btn-gray" style="width:100%;margin-bottom:8px">データなしで変更（新規）</button>
+      <button id="migrateCancelBtn" class="btn" style="width:100%">キャンセル</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="catDetailModal" style="display:none">
     <div class="modal-content" style="display:flex;flex-direction:column;max-height:80vh;padding-bottom:0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1647,10 +1661,35 @@ if(!isFirebaseConfigured){
   $('generateCodeBtn').addEventListener('click',()=>{$('familyCodeInput').value=generateRandomCode();});
   $('startBtn').addEventListener('click',()=>startWithFamilyCode($('familyCodeInput').value));
   $('changeFamilyCodeBtn').addEventListener('click',()=>{
-    if(!confirm(`家族コードを変更しますか？\n現在: ${_familyCode}\n\n変更すると別のデータになります。`))return;
-    _listenerActive=false;if(_dbRef)_dbRef.off();_isFirebaseMode=false;
-    $('appContent').style.display='none';$('familyCodeInput').value='';$('familyCodeError').style.display='none';$('familySetupOverlay').style.display='block';
+    $('migrateCurrentCode').textContent=_familyCode;
+    $('migrateNewCodeInput').value='';
+    $('migrateError').style.display='none';
+    $('migrateCodeModal').style.display='block';
   });
+  $('migrateCancelBtn').addEventListener('click',()=>{ $('migrateCodeModal').style.display='none'; });
+  async function doMigrateCode(copyData){
+    const newCode=$('migrateNewCodeInput').value.trim();
+    const errEl=$('migrateError');
+    if(newCode.length<4){ errEl.textContent='4文字以上のコードを入力してください';errEl.style.display='block';return; }
+    if(newCode===_familyCode){ errEl.textContent='現在のコードと同じです';errEl.style.display='block';return; }
+    errEl.style.display='none';
+    if(copyData){
+      const newRef=firebase.database().ref('families/'+newCode);
+      const snap=await newRef.once('value');
+      if(snap.val()&&!confirm(`"${newCode}" には既にデータが存在します。\n上書きしてよいですか？`))return;
+      $('migrateCodeModal').style.display='none';
+      $('loadingScreen').style.display='block';$('appContent').style.display='none';
+      try{ await newRef.set({days:_dayData||{},meta:_metaData||null}); }
+      catch(e){ $('loadingScreen').style.display='none';$('appContent').style.display='block';alert('データの移行に失敗しました: '+e.message);return; }
+    } else {
+      $('migrateCodeModal').style.display='none';
+    }
+    _listenerActive=false;if(_dbRef)_dbRef.off();_isFirebaseMode=false;
+    $('appContent').style.display='none';
+    await startWithFamilyCode(newCode);
+  }
+  $('migrateWithDataBtn').addEventListener('click',()=>doMigrateCode(true));
+  $('migrateWithoutDataBtn').addEventListener('click',()=>doMigrateCode(false));
   const saved=localStorage.getItem(FAMILY_CODE_STORAGE);
   if(saved) startWithFamilyCode(saved);
   else $('familySetupOverlay').style.display='block';
