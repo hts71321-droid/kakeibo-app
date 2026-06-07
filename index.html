@@ -1459,8 +1459,8 @@ document.addEventListener('click',e=>{
     $('addBtn').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
-  const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;switchTab('day');return;}
-  const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);switchTab('week');return;}
+  const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;$('catDetailModal').style.display='none';switchTab('day');return;}
+  const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);$('catDetailModal').style.display='none';switchTab('week');return;}
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
   const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
   const esdEl=t.closest('[data-ent-sub-detail]');
@@ -1490,19 +1490,30 @@ document.addEventListener('click',e=>{
   const cdEl=t.closest('[data-cat-detail]');
   if(cdEl){
     const cn=cdEl.dataset.catDetail;
-    let purchases=[],showDate=true;
     if(cdEl.closest('#pane-day')){
-      showDate=false;
+      // 日タブ: 個別明細
       const ds=$('dateInput').value;
-      purchases=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).map(p=>({date:ds,store:p.store||'',amount:p.amount}));
+      const purchases=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).map(p=>({date:ds,store:p.store||'',amount:p.amount}));
+      showCatDetailModal(cn||'未分類',purchases,false);
     } else if(cdEl.closest('#pane-week')){
+      // 週タブ: 日別合計 → 日タブへ
       const ws=getWeekStart(weekAnchor);
-      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d);getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date:ds,store:p.store||'',amount:p.amount}));}
+      const days=[];let total=0;
+      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d),amt=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).reduce((s,p)=>s+Number(p.amount||0),0);total+=amt;days.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:amt,jump:ds});}
+      $('catDetailTitle').textContent=`${cn||'未分類'} の日別`;
+      $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
+      $('catDetailList').innerHTML=days.map(d=>{const dim=d.amount===0?' style="opacity:.35"':'';return `<li class="breakdown-item" data-jump="${d.jump}"${dim}><span class="breakdown-label">${d.label}</span><span class="breakdown-amount">${fmt(d.amount)}円</span></li>`;}).join('');
+      $('catDetailModal').style.display='flex';
     } else if(cdEl.closest('#pane-month')){
-      const ms=getMonthStart(monthAnchor),me=getMonthEnd(monthAnchor),ss=formatYMD(ms),ee=formatYMD(me),data=loadDayData();
-      Object.keys(data).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{getDayEntry(date).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));});
+      // 月タブ: 週別合計 → 週タブへ
+      const ms=getMonthStart(monthAnchor),me=getMonthEnd(monthAnchor);
+      const weeks=[];let total=0,cur=getWeekStart(ms),wi=1;
+      while(cur<=me){const we=addDays(cur,6),rs=cur<ms?ms:cur,re=we>me?me:we,ss=formatYMD(rs),ee=formatYMD(re),data=loadDayData();const amt=Object.keys(data).filter(d=>d>=ss&&d<=ee).reduce((s,date)=>s+getDayEntry(date).purchases.filter(p=>(p.category||'')===cn).reduce((s2,p)=>s2+Number(p.amount||0),0),0);total+=amt;weeks.push({label:`第${wi}週 (${rs.getMonth()+1}/${rs.getDate()}〜${re.getMonth()+1}/${re.getDate()})`,amount:amt,jumpWeek:formatYMD(cur)});cur=addDays(cur,7);wi++;}
+      $('catDetailTitle').textContent=`${cn||'未分類'} の週別`;
+      $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
+      $('catDetailList').innerHTML=weeks.map(w=>{const dim=w.amount===0?' style="opacity:.35"':'';return `<li class="breakdown-item" data-jump-week="${w.jumpWeek}"${dim}><span class="breakdown-label">${w.label}</span><span class="breakdown-amount">${fmt(w.amount)}円</span></li>`;}).join('');
+      $('catDetailModal').style.display='flex';
     }
-    showCatDetailModal(cn||'未分類',purchases,showDate);
     return;
   }
   if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'||t.id==='catDetailModal'){$('catDetailModal').style.display='none';return;}
