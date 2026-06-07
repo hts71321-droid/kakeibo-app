@@ -1496,14 +1496,11 @@ document.addEventListener('click',e=>{
       const purchases=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).map(p=>({date:ds,store:p.store||'',amount:p.amount}));
       showCatDetailModal(cn||'未分類',purchases,false);
     } else if(cdEl.closest('#pane-week')){
-      // 週タブ: 日別合計 → 日タブへ
+      // 週タブ: 個別明細（日付付き）
       const ws=getWeekStart(weekAnchor);
-      const days=[];let total=0;
-      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d),amt=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).reduce((s,p)=>s+Number(p.amount||0),0);total+=amt;days.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:amt,jump:ds});}
-      $('catDetailTitle').textContent=`${cn||'未分類'} の日別`;
-      $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
-      $('catDetailList').innerHTML=days.map(d=>{const dim=d.amount===0?' style="opacity:.35"':'';return `<li class="breakdown-item" data-jump="${d.jump}"${dim}><span class="breakdown-label">${d.label}</span><span class="breakdown-amount">${fmt(d.amount)}円</span></li>`;}).join('');
-      $('catDetailModal').style.display='flex';
+      const purchases=[];
+      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d);getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date:ds,store:p.store||'',amount:p.amount}));}
+      showCatDetailModal(cn||'未分類',purchases,true);
     } else if(cdEl.closest('#pane-month')){
       // 月タブ: 週別合計 → 週タブへ
       const ms=getMonthStart(monthAnchor),me=getMonthEnd(monthAnchor);
