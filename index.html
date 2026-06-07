@@ -614,6 +614,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
+let _pendingDaysData = null; // holds locally-written days data until Firebase confirms the write
 
 // ==================== ユーティリティ ====================
 const $ = id => document.getElementById(id);
@@ -637,7 +638,21 @@ function loadDayData(){
   try{ return JSON.parse(localStorage.getItem('kakeibo-data-v1'))||{}; }catch{ return {}; }
 }
 function saveDayData(d){
-  if(_isFirebaseMode){ _dayData=d; if(_daysRef) _daysRef.set(d).catch(()=>updateSyncStatus('error')); }
+  if(_isFirebaseMode){
+    _dayData=d;
+    if(_daysRef){
+      _pendingDaysData=d;
+      _daysRef.set(d).then(()=>{
+        _pendingDaysData=null; // confirmed – allow server syncs to update freely
+      }).catch(()=>{
+        updateSyncStatus('error');
+        _pendingDaysData=null;
+        // Re-apply our local data so the rollback listener callback doesn't erase the entry
+        _dayData=d;
+        renderCurrentTab();
+      });
+    }
+  }
   else localStorage.setItem('kakeibo-data-v1',JSON.stringify(d));
 }
 function getDayEntry(date){ const raw=loadDayData()[date]; if(!raw) return {purchases:[],memo:''}; const purchases=Array.isArray(raw.purchases)?raw.purchases:(raw.purchases?Object.values(raw.purchases):[]); return {...raw,purchases}; }
@@ -1788,7 +1803,10 @@ async function startWithFamilyCode(code){
     _listenerActive=true;
     _dbRef.on('value',snap=>{
       if(!_listenerActive)return;
-      const d=snap.val()||{};_dayData=d.days||{};_metaData=d.meta||null;
+      const d=snap.val()||{};
+      // If we have an in-flight local write, protect it from a server rollback snapshot
+      _dayData=_pendingDaysData||d.days||{};
+      _metaData=d.meta||null;
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
