@@ -615,8 +615,8 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v8'; // bump on each deploy so the loaded version is visible
-let _pendingDateWrites = new Set(); // dates with an in-flight per-date write (protect from stale server snapshots)
+const APP_VERSION = 'v9';
+let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
 const $ = id => document.getElementById(id);
@@ -640,25 +640,25 @@ function loadDayData(){
   try{ return JSON.parse(localStorage.getItem('kakeibo-data-v1'))||{}; }catch{ return {}; }
 }
 function getDayEntry(date){ const raw=loadDayData()[date]; if(!raw) return {purchases:[],memo:''}; const purchases=Array.isArray(raw.purchases)?raw.purchases:(raw.purchases?Object.values(raw.purchases):[]); return {...raw,purchases}; }
-// 1日分だけを書き込む（days全体を上書きしないので他の日付が消えない）
-function setDayEntry(date,entry){
-  const hasContent=(entry.purchases&&entry.purchases.length)||(entry.memo&&entry.memo.trim());
+function saveDayData(d){
   if(_isFirebaseMode){
-    // ローカルを即時更新（追加直後の表示に反映される）
-    if(hasContent) _dayData[date]=entry; else delete _dayData[date];
+    _dayData=d;
     if(_daysRef){
-      _pendingDateWrites.add(date);
-      const ref=_daysRef.child(date);
-      const p=hasContent?ref.set(entry):ref.remove();
-      p.then(()=>{ _pendingDateWrites.delete(date); updateSyncStatus('synced'); })
-       .catch(()=>{ _pendingDateWrites.delete(date); updateSyncStatus('error'); });
+      _pendingDaysData=d;
+      _daysRef.set(d).then(()=>{
+        _pendingDaysData=null;
+        renderCurrentTab();updateSyncStatus('synced');
+      }).catch(()=>{
+        updateSyncStatus('error');
+        _pendingDaysData=null;
+        _dayData=d;
+        renderCurrentTab();
+      });
     }
-  }else{
-    const d=loadDayData();
-    if(hasContent) d[date]=entry; else delete d[date];
-    localStorage.setItem('kakeibo-data-v1',JSON.stringify(d));
   }
+  else localStorage.setItem('kakeibo-data-v1',JSON.stringify(d));
 }
+function setDayEntry(date,entry){ const d=loadDayData(); d[date]=entry; saveDayData(d); }
 
 function saveMeta(m){
   if(_isFirebaseMode){ _metaData=m; if(_metaRef) _metaRef.set(m).catch(()=>updateSyncStatus('error')); }
@@ -1808,15 +1808,12 @@ async function startWithFamilyCode(code){
       if(!_listenerActive)return;
       const d=snap.val()||{};
       _metaData=d.meta||null;
-      const serverDays=d.days||{};
-      // 書き込み中の日付はローカル値を優先（古いスナップショットで上書きされるのを防ぐ）
-      if(_pendingDateWrites.size){
-        _pendingDateWrites.forEach(dt=>{
-          if(_dayData[dt]!==undefined) serverDays[dt]=_dayData[dt];
-          else delete serverDays[dt];
-        });
+      if(_pendingDaysData){
+        // 書き込み中: サーバーの古いスナップショットで上書きしない
+        updateSyncStatus('synced');
+        return;
       }
-      _dayData=serverDays;
+      _dayData=d.days||{};
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
