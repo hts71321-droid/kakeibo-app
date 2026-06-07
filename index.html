@@ -212,6 +212,10 @@
         <input type="text" id="customCatInput" list="customCatList" placeholder="例: プレゼント代">
         <datalist id="customCatList"></datalist>
       </div>
+      <div id="subCatRow" style="display:none">
+        <label style="font-size:.9em;color:#888">娯楽費の内訳（任意）</label>
+        <select id="subCatInput" style="font-size:.95em"></select>
+      </div>
       <label for="storeInput">店名・内容</label>
       <input type="text" id="storeInput" placeholder="例: 無印、ローソン">
       <label for="amountInput">金額（円）</label>
@@ -440,6 +444,10 @@
       <div class="total" id="yearVarTotal">変動支出合計: 0 円</div>
     </div>
     <div class="card"><h2>📊 カテゴリ別合計（変動支出）</h2><ul id="yearCategoryList" class="breakdown-list"></ul></div>
+    <div class="card" id="entertainmentYearCard" style="display:none">
+      <h2>🎮 娯楽費 内訳（年間）</h2>
+      <div id="entertainmentYearList"></div>
+    </div>
     <div class="card">
       <h2>📝 年の備考</h2>
       <textarea id="yearMemo" placeholder="この年のメモ..."></textarea>
@@ -459,6 +467,7 @@
       <button class="sub-tab" data-sub="fixed">📌 固定費</button>
       <button class="sub-tab" data-sub="special">🎉 特別出費</button>
       <button class="sub-tab" data-sub="budget">📋 予算設定</button>
+      <button class="sub-tab" data-sub="ent">🎮 娯楽費</button>
     </div>
     <div class="sub-pane active" id="sub-income">
       <div id="incomePersonsList"></div>
@@ -511,6 +520,18 @@
         <div class="hint" style="margin-bottom:12px">0のカテゴリは月タブで非表示になります</div>
         <div id="categoryBudgetList"></div>
         <button id="saveCategoryBudgetBtn" class="btn btn-blue">カテゴリ予算を保存</button>
+      </div>
+    </div>
+    <div class="sub-pane" id="sub-ent">
+      <div class="cat-card">
+        <div class="cat-name" style="margin-bottom:12px">🎮 娯楽費 サブカテゴリ管理</div>
+        <div class="hint" style="margin-bottom:12px">入力時に「娯楽費」を選ぶと内訳を選択できます。年間予算を設定すると年タブで残額が確認できます。</div>
+        <div id="entSubList"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #eee">
+          <input type="text" id="entSubNameInput" placeholder="名前（例: 拓）">
+          <input type="number" id="entSubBudgetInput" inputmode="numeric" placeholder="年間予算（円）">
+          <button id="addEntSubBtn" class="btn btn-blue">+ 追加</button>
+        </div>
       </div>
     </div>
   </div>
@@ -634,7 +655,7 @@ function makeDefaultMeta(){
   const fixedDefaults={'固定費':['住宅費','住宅管理費','上下水道代','スマホ代','車ローン'],'サブスク':['Spotify','dマガジン','ルナルナ','dアニメ','花','icloud','Netflix'],'預貯金':['NISA','IDECO'],'保険料':[]};
   const year=new Date().getFullYear(); const fixedItems=[];
   fixedCats.forEach(cat=>(fixedDefaults[cat.name]||[]).forEach((label,idx)=>fixedItems.push({id:genId(),categoryId:cat.id,label,year,months:{},memo:'',order:idx})));
-  return {weekMemo:{},monthMemo:{},yearMemo:{},incomes:{persons,items:[]},fixedCosts:{categories:fixedCats,items:fixedItems},specialExpenses:{categories:specialCats,items:[],transactions:[]},budget:{monthlyVariableDefault:0,enableCarryOver:false,categories:{}}};
+  return {weekMemo:{},monthMemo:{},yearMemo:{},incomes:{persons,items:[]},fixedCosts:{categories:fixedCats,items:fixedItems},specialExpenses:{categories:specialCats,items:[],transactions:[]},budget:{monthlyVariableDefault:0,enableCarryOver:false,categories:{}},entertainmentSubs:[]};
 }
 
 function loadMeta(){
@@ -648,6 +669,7 @@ function loadMeta(){
     if(raw.incomes) raw.incomes.persons=norm(raw.incomes.persons);
     if(raw.fixedCosts){ raw.fixedCosts.items=norm(raw.fixedCosts.items); raw.fixedCosts.categories=norm(raw.fixedCosts.categories); }
     if(raw.specialExpenses){ raw.specialExpenses.items=norm(raw.specialExpenses.items); raw.specialExpenses.categories=norm(raw.specialExpenses.categories); raw.specialExpenses.transactions=norm(raw.specialExpenses.transactions); }
+    raw.entertainmentSubs=norm(raw.entertainmentSubs);
     return raw;
   }
   if(!_isFirebaseMode&&(Array.isArray(raw.incomes)||Array.isArray(raw.fixedCosts))) localStorage.setItem(BACKUP_KEY,JSON.stringify(raw));
@@ -867,10 +889,15 @@ function clearDayForm(){
   _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
   updateResetCatBtn();
 }
+function populateSubCatSelect(selectedName){
+  const subs=loadMeta().entertainmentSubs||[];
+  $('subCatInput').innerHTML='<option value="">（分類なし）</option>'+subs.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+  if(selectedName) $('subCatInput').value=selectedName;
+}
 function resetDayForm(){
   // 完全リセット（編集キャンセル・日付変更時など）
   $('storeInput').value='';$('amountInput').value='';$('customCatInput').value='';
-  $('catInput').value='食費';$('customCatRow').style.display='none';
+  $('catInput').value='食費';$('customCatRow').style.display='none';$('subCatRow').style.display='none';
   _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
   updateResetCatBtn();
 }
@@ -879,11 +906,14 @@ function updateResetCatBtn(){
   $('resetCatBtn').style.display=isDefault?'none':'inline';
 }
 $('catInput').addEventListener('change',()=>{
-  const isO=$('catInput').value==='その他';$('customCatRow').style.display=isO?'block':'none';
+  const v=$('catInput').value;
+  const isO=v==='その他';$('customCatRow').style.display=isO?'block':'none';
   if(isO){updateDatalist();$('customCatInput').focus();}
+  const isEnt=v==='娯楽費';$('subCatRow').style.display=isEnt?'block':'none';
+  if(isEnt) populateSubCatSelect();
   updateResetCatBtn();
 });
-$('resetCatBtn').addEventListener('click',()=>{ $('catInput').value='食費';$('customCatInput').value='';$('customCatRow').style.display='none';updateResetCatBtn(); });
+$('resetCatBtn').addEventListener('click',()=>{ $('catInput').value='食費';$('customCatInput').value='';$('customCatRow').style.display='none';$('subCatRow').style.display='none';updateResetCatBtn(); });
 $('cancelEditBtn').addEventListener('click',()=>{ resetDayForm(); renderDay(); });
 $('addBtn').addEventListener('click',()=>{
   const date=$('dateInput').value; let category=$('catInput').value,isCustom=false;
@@ -891,10 +921,11 @@ $('addBtn').addEventListener('click',()=>{
   const store=$('storeInput').value.trim(), amount=Number($('amountInput').value);
   if(!amount||amount<=0){alert('金額を入力してください');return;}
   const entry=getDayEntry(date);
+  const subCat=(category==='娯楽費'&&$('subCatInput').value)||undefined;
   if(_editingIdx!==null){
-    entry.purchases[_editingIdx]={...entry.purchases[_editingIdx],category,store,amount,isCustom};
+    entry.purchases[_editingIdx]={...entry.purchases[_editingIdx],category,store,amount,isCustom,subCat};
   } else {
-    entry.purchases.push({category,store,amount,isCustom});
+    entry.purchases.push({category,store,amount,isCustom,subCat});
   }
   setDayEntry(date,entry);
   clearDayForm();
@@ -1160,7 +1191,38 @@ function renderYear(){
     <div class="summary-row expense"><span>🎉 特別出費合計</span><span>${fmt(yearSp)} 円</span></div>
     <div class="summary-row balance ${yb>=0?'positive':'negative'}"><span>💼 期間収支</span><span>${yb>=0?'+':''}${fmt(yb)} 円</span></div>`;
   renderYearComparison(year,startYM,endYM,sy,sm,ey,em,periodEnd);
+  renderEntertainmentSubYear(periodStart,periodEnd);
   $('yearMemo').value=loadMeta().yearMemo[year]||'';
+}
+
+function renderEntertainmentSubYear(periodStart,periodEnd){
+  const subs=(loadMeta().entertainmentSubs||[]);
+  const card=$('entertainmentYearCard');
+  if(!subs.length){card.style.display='none';return;}
+  const ss=formatYMD(periodStart),ee=formatYMD(periodEnd),data=loadDayData();
+  const totals={};subs.forEach(s=>totals[s.name]=0);
+  let noSubTotal=0;
+  Object.keys(data).filter(d=>d>=ss&&d<=ee).forEach(date=>{
+    getDayEntry(date).purchases.filter(p=>p.category==='娯楽費').forEach(p=>{
+      if(p.subCat&&totals.hasOwnProperty(p.subCat)) totals[p.subCat]+=Number(p.amount||0);
+      else if(!p.subCat) noSubTotal+=Number(p.amount||0);
+    });
+  });
+  $('entertainmentYearList').innerHTML=subs.map(s=>{
+    const total=totals[s.name]||0,budget=s.budget||0;
+    const pct=budget>0?Math.min(100,Math.round(total/budget*100)):0;
+    const col=pct>=100?'#e74c3c':pct>=80?'#e67e22':'#27ae60';
+    const rem=budget-total;
+    return `<div style="margin-bottom:14px;padding:10px;background:#f8f9fa;border-radius:8px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-weight:600">${s.name}</span>
+        <span style="font-weight:600">${fmt(total)}<span style="color:#aaa;font-size:.85em"> / ${budget>0?fmt(budget)+'円':'予算未設定'}</span></span>
+      </div>
+      ${budget>0?`<div class="bbar"><div class="bbar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div style="font-size:.77em;text-align:right;color:${rem>=0?'#27ae60':'#e74c3c'};margin-top:2px">${rem>=0?`残り ${fmt(rem)}円（使用${pct}%）`:`超過 ${fmt(-rem)}円`}</div>`:''}
+    </div>`;
+  }).join('')+(noSubTotal>0?`<div style="font-size:.85em;color:#aaa;text-align:right;padding-top:4px">（分類なし: ${fmt(noSubTotal)}円）</div>`:'');
+  card.style.display='block';
 }
 
 function renderYearComparison(year,startYM,endYM,sy,sm,ey,em,periodEnd){
@@ -1206,7 +1268,13 @@ function renderYearSelect(){ $('regularYear').innerHTML=getYearList().map(y=>`<o
 $('regularYear').addEventListener('change',e=>{currentRegularYear=Number(e.target.value);renderRegular();});
 $('reorderToggle').addEventListener('click',()=>{ reorderMode=!reorderMode;$('reorderToggle').textContent=reorderMode?'🔀 並べ替えモード ON':'📋 通常モード（タップで並べ替えモード）';$('reorderToggle').classList.toggle('btn-orange',reorderMode);$('reorderToggle').classList.toggle('btn-gray',!reorderMode);renderRegular(); });
 
-function renderRegular(){ renderYearSelect();renderIncomeSub();renderFixedSub();renderSpecialSub(); }
+function renderRegular(){ renderYearSelect();renderIncomeSub();renderFixedSub();renderSpecialSub();renderEntertainmentSub(); }
+function renderEntertainmentSub(){
+  const subs=(loadMeta().entertainmentSubs||[]);
+  const el=$('entSubList');
+  if(!subs.length){ el.innerHTML='<div class="empty">サブカテゴリがまだありません</div>'; return; }
+  el.innerHTML=subs.map(s=>`<div class="item-row"><div class="item-info"><div class="item-label">${s.name}</div><div class="item-sub">年間予算: ¥${fmt(s.budget||0)}</div></div><div class="item-actions"><button class="primary" data-edit-ent-sub="${s.id}">編集</button><button class="del" data-del-ent-sub="${s.id}">×</button></div></div>`).join('');
+}
 
 function renderIncomeSub(){
   const meta=loadMeta(),persons=(meta.incomes.persons||[]).sort((a,b)=>a.order-b.order);
@@ -1381,6 +1449,8 @@ document.addEventListener('click',e=>{
     const isCustom=p.isCustom&&!STD_CATS.includes(p.category);
     if(isCustom){ $('catInput').value='その他'; $('customCatRow').style.display='block'; $('customCatInput').value=p.category; }
     else { $('catInput').value=p.category; $('customCatRow').style.display='none'; }
+    if(p.category==='娯楽費'){ $('subCatRow').style.display='block'; populateSubCatSelect(p.subCat||''); }
+    else $('subCatRow').style.display='none';
     $('storeInput').value=p.store||'';
     $('amountInput').value=p.amount;
     $('addBtn').textContent='更新';
@@ -1415,6 +1485,24 @@ document.addEventListener('click',e=>{
   if(t.id==='addPersonBtn') addPerson();
   if(t.id==='addFixedCatBtn') addCategory('fixed');
   if(t.id==='addSpecialCatBtn') addCategory('special');
+  if(t.id==='addEntSubBtn'){
+    const name=$('entSubNameInput').value.trim(),budget=Number($('entSubBudgetInput').value)||0;
+    if(!name){alert('名前を入力してください');return;}
+    const meta=loadMeta();if(!meta.entertainmentSubs)meta.entertainmentSubs=[];
+    if(meta.entertainmentSubs.find(s=>s.name===name)){alert('同じ名前が既にあります');return;}
+    meta.entertainmentSubs.push({id:genId(),name,budget});saveMeta(meta);
+    $('entSubNameInput').value='';$('entSubBudgetInput').value='';renderEntertainmentSub();return;
+  }
+  if(t.dataset.delEntSub){
+    if(!confirm('削除しますか？'))return;
+    const meta=loadMeta();meta.entertainmentSubs=(meta.entertainmentSubs||[]).filter(s=>s.id!==t.dataset.delEntSub);saveMeta(meta);renderEntertainmentSub();return;
+  }
+  if(t.dataset.editEntSub){
+    const meta=loadMeta(),s=(meta.entertainmentSubs||[]).find(x=>x.id===t.dataset.editEntSub);if(!s)return;
+    const name=prompt('名前',s.name);if(name===null)return;
+    const budgetStr=prompt('年間予算（円）',s.budget||0);if(budgetStr===null)return;
+    s.name=name.trim()||s.name;s.budget=Number(budgetStr)||0;saveMeta(meta);renderEntertainmentSub();return;
+  }
   if(t.id==='addSpecialTxBtn'){ handleAddSpecialTx(); return; }
   if(t.dataset.addIncome) openModal({type:'income',itemId:null,ownerId:t.dataset.addIncome});
   if(t.dataset.addFixed) openModal({type:'fixed',itemId:null,ownerId:t.dataset.addFixed});
