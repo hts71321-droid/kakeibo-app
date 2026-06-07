@@ -615,7 +615,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -979,9 +979,29 @@ function renderWeek(){
   const start=getWeekStart(weekAnchor),end=addDays(start,6);
   $('weekLabel').textContent=`${start.getMonth()+1}/${start.getDate()}(${WEEK_DAYS[start.getDay()]}) 〜 ${end.getMonth()+1}/${end.getDate()}(${WEEK_DAYS[end.getDay()]})`;
   const dayItems=[]; let weekTotal=0;
-  for(let i=0;i<7;i++){ const d=addDays(start,i),ds=formatYMD(d),t=getDayTotal(ds),memo=getDayEntry(ds).memo||''; weekTotal+=t; dayItems.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:t,jump:ds,memo}); }
-  renderBreakdown($('weekDayList'),dayItems);
-  $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
+  for(let i=0;i<7;i++){ const d=addDays(start,i),ds=formatYMD(d),t=getDayTotal(ds),memo=getDayEntry(ds).memo||''; weekTotal+=t; dayItems.push({label:`${d.getMonth()+1}/${d.getDate()}(${WEEK_DAYS[d.getDay()]})`,amount:t,jump:ds,memo,month:d.getMonth()}); }
+  const crossesMonth=start.getMonth()!==end.getMonth();
+  if(crossesMonth){
+    const list=$('weekDayList'); list.innerHTML='';
+    let prevMonth=-1;
+    const monthSepHtml=(m,total)=>`<li class="breakdown-item" style="background:#f5f5f5;border-radius:6px"><span class="breakdown-label" style="font-weight:bold;color:#666">${m+1}月小計</span><span class="breakdown-amount" style="font-weight:bold;color:#666">${fmt(total)}円</span></li>`;
+    dayItems.forEach(item=>{
+      if(prevMonth!==-1&&item.month!==prevMonth){
+        const subTotal=dayItems.filter(x=>x.month===prevMonth).reduce((s,x)=>s+x.amount,0);
+        list.insertAdjacentHTML('beforeend',monthSepHtml(prevMonth,subTotal));
+      }
+      prevMonth=item.month;
+      const dimmed=item.amount===0?' style="color:#ccc"':'';
+      const memoHtml=item.memo?`<span style="display:block;font-size:.75em;color:#aaa;font-style:italic;margin-top:1px">${item.memo}</span>`:'';
+      list.insertAdjacentHTML('beforeend',`<li class="breakdown-item" data-jump="${item.jump}"><span class="breakdown-label"${dimmed}>${item.label}${memoHtml}</span><span class="breakdown-amount"${dimmed}>${fmt(item.amount)}円</span></li>`);
+    });
+    const lastSubTotal=dayItems.filter(x=>x.month===end.getMonth()).reduce((s,x)=>s+x.amount,0);
+    list.insertAdjacentHTML('beforeend',monthSepHtml(end.getMonth(),lastSubTotal));
+    $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
+  } else {
+    renderBreakdown($('weekDayList'),dayItems);
+    $('weekTotal').textContent=`週合計: ${fmt(weekTotal)} 円`;
+  }
   const cats=aggregateByCategory(start,end);
   const catTotal=Object.values(cats).reduce((s,v)=>s+v,0);
   renderBreakdown($('weekCategoryList'),sortedCatItems(cats));
