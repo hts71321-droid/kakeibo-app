@@ -177,6 +177,7 @@
   <h1>📒 我が家の家計簿</h1>
   <div id="syncBar">
     <span id="syncStatus">🔄 接続中...</span>
+    <span id="appVersion" style="font-size:.75em;color:#aaa;margin-left:6px"></span>
     <button id="changeFamilyCodeBtn">コード変更</button>
   </div>
 
@@ -614,7 +615,8 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-let _pendingDaysData = null; // holds locally-written days data until Firebase confirms the write
+const APP_VERSION = 'v7'; // bump on each deploy so the loaded version is visible
+let _pendingDateWrites = new Set(); // dates with an in-flight per-date write (protect from stale server snapshots)
 
 // ==================== ユーティリティ ====================
 const $ = id => document.getElementById(id);
@@ -637,27 +639,26 @@ function loadDayData(){
   if(_isFirebaseMode) return _dayData;
   try{ return JSON.parse(localStorage.getItem('kakeibo-data-v1'))||{}; }catch{ return {}; }
 }
-function saveDayData(d){
-  if(_isFirebaseMode){
-    _dayData=d;
-    if(_daysRef){
-      _pendingDaysData=d;
-      _daysRef.set(d).then(()=>{
-        _pendingDaysData=null;
-        renderCurrentTab();updateSyncStatus('synced');
-      }).catch(()=>{
-        updateSyncStatus('error');
-        _pendingDaysData=null;
-        // Re-apply our local data so the rollback listener callback doesn't erase the entry
-        _dayData=d;
-        renderCurrentTab();
-      });
-    }
-  }
-  else localStorage.setItem('kakeibo-data-v1',JSON.stringify(d));
-}
 function getDayEntry(date){ const raw=loadDayData()[date]; if(!raw) return {purchases:[],memo:''}; const purchases=Array.isArray(raw.purchases)?raw.purchases:(raw.purchases?Object.values(raw.purchases):[]); return {...raw,purchases}; }
-function setDayEntry(date,entry){ const d=loadDayData(); d[date]=entry; saveDayData(d); }
+// 1日分だけを書き込む（days全体を上書きしないので他の日付が消えない）
+function setDayEntry(date,entry){
+  const hasContent=(entry.purchases&&entry.purchases.length)||(entry.memo&&entry.memo.trim());
+  if(_isFirebaseMode){
+    // ローカルを即時更新（追加直後の表示に反映される）
+    if(hasContent) _dayData[date]=entry; else delete _dayData[date];
+    if(_daysRef){
+      _pendingDateWrites.add(date);
+      const ref=_daysRef.child(date);
+      const p=hasContent?ref.set(entry):ref.remove();
+      p.then(()=>{ _pendingDateWrites.delete(date); updateSyncStatus('synced'); })
+       .catch(()=>{ _pendingDateWrites.delete(date); updateSyncStatus('error'); });
+    }
+  }else{
+    const d=loadDayData();
+    if(hasContent) d[date]=entry; else delete d[date];
+    localStorage.setItem('kakeibo-data-v1',JSON.stringify(d));
+  }
+}
 
 function saveMeta(m){
   if(_isFirebaseMode){ _metaData=m; if(_metaRef) _metaRef.set(m).catch(()=>updateSyncStatus('error')); }
@@ -816,6 +817,7 @@ function updateSyncStatus(s){
   const el=$('syncStatus'); if(!el) return;
   const m={synced:`✅ 同期済み（${_familyCode}）`,syncing:'🔄 同期中...',error:'⚠️ 接続エラー'};
   el.textContent=m[s]||s;
+  const ve=$('appVersion'); if(ve) ve.textContent=APP_VERSION;
 }
 function showCatDetailModal(title,purchases,showDate){
   const total=purchases.reduce((s,p)=>s+Number(p.amount||0),0);
@@ -1806,12 +1808,15 @@ async function startWithFamilyCode(code){
       if(!_listenerActive)return;
       const d=snap.val()||{};
       _metaData=d.meta||null;
-      if(_pendingDaysData){
-        // Write in-flight: skip re-render so the optimistic UI isn't overwritten
-        updateSyncStatus('synced');
-        return;
+      const serverDays=d.days||{};
+      // 書き込み中の日付はローカル値を優先（古いスナップショットで上書きされるのを防ぐ）
+      if(_pendingDateWrites.size){
+        _pendingDateWrites.forEach(dt=>{
+          if(_dayData[dt]!==undefined) serverDays[dt]=_dayData[dt];
+          else delete serverDays[dt];
+        });
       }
-      _dayData=d.days||{};
+      _dayData=serverDays;
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
