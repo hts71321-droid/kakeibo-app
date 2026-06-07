@@ -615,7 +615,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1807,13 +1807,9 @@ async function startWithFamilyCode(code){
     _dbRef.on('value',snap=>{
       if(!_listenerActive)return;
       const d=snap.val()||{};
+      // _pendingDaysData が残っている間は書き込み中のローカルデータを優先
+      _dayData=_pendingDaysData||d.days||{};
       _metaData=d.meta||null;
-      if(_pendingDaysData){
-        // 書き込み中: サーバーの古いスナップショットで上書きしない
-        updateSyncStatus('synced');
-        return;
-      }
-      _dayData=d.days||{};
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
