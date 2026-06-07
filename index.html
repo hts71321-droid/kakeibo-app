@@ -1469,12 +1469,23 @@ document.addEventListener('click',e=>{
     const startYM=$('yearStart').value,endYM=$('yearEnd').value;
     if(!startYM||!endYM)return;
     const [sy,sm]=startYM.split('-').map(Number),[ey,em]=endYM.split('-').map(Number);
-    const ss=`${sy}-${pad(sm)}-01`,ee=formatYMD(new Date(ey,em,0));
-    const purchases=[];
-    Object.keys(loadDayData()).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{
-      getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));
-    });
-    showCatDetailModal(`娯楽費／${subName}`,purchases,true);return;
+    const periodEnd=new Date(ey,em,0);
+    let cm=new Date(sy,sm-1,1);const months=[];let total=0;
+    while(cm<=periodEnd){
+      const ms=new Date(cm.getFullYear(),cm.getMonth(),1),me=new Date(cm.getFullYear(),cm.getMonth()+1,0);
+      const ss2=formatYMD(ms),ee2=formatYMD(me),data=loadDayData();
+      const amt=Object.keys(data).filter(d=>d>=ss2&&d<=ee2).reduce((s,date)=>s+getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).reduce((s2,p)=>s2+Number(p.amount||0),0),0);
+      total+=amt;
+      months.push({ym:`${cm.getFullYear()}-${pad(cm.getMonth()+1)}`,label:`${cm.getFullYear()}年${cm.getMonth()+1}月`,amount:amt});
+      cm=new Date(cm.getFullYear(),cm.getMonth()+1,1);
+    }
+    $('catDetailTitle').textContent=`娯楽費／${subName} 月別`;
+    $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
+    $('catDetailList').innerHTML=months.map(m=>{
+      const dimmed=m.amount===0?' style="opacity:.35"':'';
+      return `<li class="breakdown-item" data-jump-month="${m.ym}"${dimmed}><span class="breakdown-label">${m.label}</span><span class="breakdown-amount">${fmt(m.amount)}円</span></li>`;
+    }).join('');
+    $('catDetailModal').style.display='flex';return;
   }
   const cdEl=t.closest('[data-cat-detail]');
   if(cdEl){
