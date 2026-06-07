@@ -174,7 +174,7 @@
 
 <!-- メインアプリ -->
 <div id="appContent" style="display:none">
-  <h1>📒 我が家の家計簿</h1>
+  <h1>📒 我が家の家計簿 <span id="appVersionTitle" style="font-size:.45em;color:#bbb;vertical-align:middle"></span></h1>
   <div id="syncBar">
     <span id="syncStatus">🔄 接続中...</span>
     <span id="appVersion" style="font-size:.75em;color:#aaa;margin-left:6px"></span>
@@ -615,7 +615,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v7'; // bump on each deploy so the loaded version is visible
+const APP_VERSION = 'v8'; // bump on each deploy so the loaded version is visible
 let _pendingDateWrites = new Set(); // dates with an in-flight per-date write (protect from stale server snapshots)
 
 // ==================== ユーティリティ ====================
@@ -1829,6 +1829,7 @@ async function startWithFamilyCode(code){
 }
 
 // ==================== 初期化 ====================
+{ const vt=$('appVersionTitle'); if(vt) vt.textContent=APP_VERSION; console.log('家計簿アプリ バージョン:',APP_VERSION); }
 if(!isFirebaseConfigured){
   $('firebaseSetupOverlay').style.display='block';
 }else{
