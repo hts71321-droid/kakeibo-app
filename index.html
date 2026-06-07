@@ -615,7 +615,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -644,15 +644,15 @@ function saveDayData(d){
   if(_isFirebaseMode){
     _dayData=d;
     if(_daysRef){
+      // Firebaseはundefinedを含む値で同期的に例外を投げるため、JSON往復でundefinedを除去
+      const clean=JSON.parse(JSON.stringify(d));
       _pendingDaysData=d;
-      _daysRef.set(d).then(()=>{
+      _daysRef.set(clean).then(()=>{
         _pendingDaysData=null;
         renderCurrentTab();updateSyncStatus('synced');
       }).catch(()=>{
-        updateSyncStatus('error');
         _pendingDaysData=null;
-        _dayData=d;
-        renderCurrentTab();
+        updateSyncStatus('error');
       });
     }
   }
@@ -661,7 +661,7 @@ function saveDayData(d){
 function setDayEntry(date,entry){ const d=loadDayData(); d[date]=entry; saveDayData(d); }
 
 function saveMeta(m){
-  if(_isFirebaseMode){ _metaData=m; if(_metaRef) _metaRef.set(m).catch(()=>updateSyncStatus('error')); }
+  if(_isFirebaseMode){ _metaData=m; if(_metaRef){ const clean=JSON.parse(JSON.stringify(m)); _metaRef.set(clean).catch(()=>updateSyncStatus('error')); } }
   else localStorage.setItem('kakeibo-meta-v1',JSON.stringify(m));
 }
 
