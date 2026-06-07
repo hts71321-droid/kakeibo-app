@@ -60,7 +60,7 @@
     .breakdown-list{list-style:none;padding:0;margin:0}
     .breakdown-item{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #eee;font-size:0.95em}
     .breakdown-item:last-child{border-bottom:none}
-    .breakdown-item[data-jump],.breakdown-item[data-jump-week],.breakdown-item[data-cat-detail]{cursor:pointer}
+    .breakdown-item[data-jump],.breakdown-item[data-jump-week],.breakdown-item[data-jump-month],.breakdown-item[data-cat-detail],.breakdown-item[data-cat-year-detail]{cursor:pointer}
     .breakdown-label{color:#555}.breakdown-amount{font-weight:600;color:#2c3e50}
     .summary-row{display:flex;justify-content:space-between;padding:6px 0;font-size:1em}
     .summary-sub{display:flex;justify-content:space-between;padding:2px 0 2px 16px;font-size:0.85em;color:#888}
@@ -696,7 +696,9 @@ function renderBreakdown(listEl,items){
     let ja='';
     if(item.jump) ja=`data-jump="${item.jump}"`;
     else if(item.jumpWeek) ja=`data-jump-week="${item.jumpWeek}"`;
+    else if(item.jumpMonth) ja=`data-jump-month="${item.jumpMonth}"`;
     else if(item.catDetail!==undefined) ja=`data-cat-detail="${item.catDetail}"`;
+    else if(item.catYearDetail!==undefined) ja=`data-cat-year-detail="${item.catYearDetail}"`;
     const dimmed=item.amount===0?' style="color:#ccc"':'';
     const memoHtml=item.memo?`<span style="display:block;font-size:.75em;color:#aaa;font-style:italic;margin-top:1px">${item.memo}</span>`:'';
     return `<li class="breakdown-item" ${ja}><span class="breakdown-label"${dimmed}>${item.label}${memoHtml}</span><span class="breakdown-amount"${dimmed}>${fmt(item.amount)}円</span></li>`;
@@ -785,6 +787,27 @@ function showCatDetailModal(title,purchases,showDate){
     const ds=showDate?`<span style="color:#888;font-size:.85em;margin-right:5px">${p.date.slice(5).replace('-','/')}</span>`:'';
     return `<li class="breakdown-item"><span class="breakdown-label">${ds}${p.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(p.amount)}円</span></li>`;
   }).join(''):'<li class="empty">データなし</li>';
+  $('catDetailModal').style.display='flex';
+}
+function showCatYearDetail(catName){
+  const startYM=$('yearStart').value,endYM=$('yearEnd').value;
+  if(!startYM||!endYM)return;
+  const [sy,sm]=startYM.split('-').map(Number),[ey,em]=endYM.split('-').map(Number);
+  let cm=new Date(sy,sm-1,1);const periodEnd=new Date(ey,em,0);
+  const months=[];let total=0;
+  while(cm<=periodEnd){
+    const ms=new Date(cm.getFullYear(),cm.getMonth(),1),me=new Date(cm.getFullYear(),cm.getMonth()+1,0);
+    const cats=aggregateByCategory(ms,me),amt=cats[catName]||0;total+=amt;
+    const ym=`${cm.getFullYear()}-${pad(cm.getMonth()+1)}`;
+    months.push({ym,label:`${cm.getFullYear()}年${cm.getMonth()+1}月`,amount:amt});
+    cm=new Date(cm.getFullYear(),cm.getMonth()+1,1);
+  }
+  $('catDetailTitle').textContent=`${catName} の月別`;
+  $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
+  $('catDetailList').innerHTML=months.map(m=>{
+    const dimmed=m.amount===0?' style="opacity:.35"':'';
+    return `<li class="breakdown-item" data-jump-month="${m.ym}"${dimmed}><span class="breakdown-label">${m.label}</span><span class="breakdown-amount">${fmt(m.amount)}円</span></li>`;
+  }).join('');
   $('catDetailModal').style.display='flex';
 }
 function renderCurrentTab(){
@@ -1121,13 +1144,13 @@ function renderYear(){
     yearInc+=getMonthIncomes(y,mi).reduce((s,i)=>s+i.amt,0);
     yearFix+=getMonthFixed(y,mi).reduce((s,i)=>s+i.amt,0);
     yearSp+=getMonthSpecial(y,mi).reduce((s,i)=>s+i.amt,0);
-    monthItems.push({label:`${cm.getMonth()+1}月`,amount:mvt});
+    monthItems.push({label:`${cm.getMonth()+1}月`,amount:mvt,jumpMonth:`${y}-${pad(mi)}`});
     cm=new Date(cm.getFullYear(),cm.getMonth()+1,1);
   }
   renderBreakdown($('yearMonthList'),monthItems);
   $('yearVarTotal').textContent=`変動支出合計: ${fmt(yearVar)} 円`;
   const cats=aggregateByCategory(periodStart,periodEnd);
-  renderBreakdown($('yearCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c]})));
+  renderBreakdown($('yearCategoryList'),Object.keys(cats).sort((a,b)=>cats[b]-cats[a]).map(c=>({label:c,amount:cats[c],catYearDetail:c})));
   const yb=yearInc-yearVar-yearFix-yearSp;
   $('yearSummary').innerHTML=`
     <div class="hint">📆 ${startYM} 〜 ${endYM}</div>
@@ -1368,6 +1391,8 @@ document.addEventListener('click',e=>{
   }
   const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;switchTab('day');return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);switchTab('week');return;}
+  const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
+  const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
   const cdEl=t.closest('[data-cat-detail]');
   if(cdEl){
     const cn=cdEl.dataset.catDetail;
