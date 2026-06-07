@@ -643,7 +643,8 @@ function saveDayData(d){
     if(_daysRef){
       _pendingDaysData=d;
       _daysRef.set(d).then(()=>{
-        _pendingDaysData=null; // confirmed – allow server syncs to update freely
+        _pendingDaysData=null;
+        renderCurrentTab();updateSyncStatus('synced');
       }).catch(()=>{
         updateSyncStatus('error');
         _pendingDaysData=null;
@@ -1804,9 +1805,13 @@ async function startWithFamilyCode(code){
     _dbRef.on('value',snap=>{
       if(!_listenerActive)return;
       const d=snap.val()||{};
-      // If we have an in-flight local write, protect it from a server rollback snapshot
-      _dayData=_pendingDaysData||d.days||{};
       _metaData=d.meta||null;
+      if(_pendingDaysData){
+        // Write in-flight: skip re-render so the optimistic UI isn't overwritten
+        updateSyncStatus('synced');
+        return;
+      }
+      _dayData=d.days||{};
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
