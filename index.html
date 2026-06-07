@@ -223,7 +223,7 @@
         <input type="number" id="amountInput" inputmode="numeric" placeholder="例: 634" style="flex:1">
         <button id="calcOpenBtn" type="button" style="padding:10px 14px;background:#f39c12;color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0">🧮</button>
       </div>
-      <button id="addBtn" class="btn btn-blue">追加</button>
+      <button id="addBtn" type="button" class="btn btn-blue">追加</button>
       <button id="cancelEditBtn" class="btn btn-gray" style="display:none">✕ 編集キャンセル</button>
     </div>
     <div class="card">
@@ -887,6 +887,7 @@ function clearDayForm(){
   // 追加後：カテゴリはそのまま、店名・金額だけクリア
   $('storeInput').value='';$('amountInput').value='';
   _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
+  $('subCatRow').style.display=$('catInput').value==='娯楽費'?'block':'none';
   updateResetCatBtn();
 }
 function populateSubCatSelect(selectedName){
@@ -916,13 +917,17 @@ $('catInput').addEventListener('change',()=>{
 $('resetCatBtn').addEventListener('click',()=>{ $('catInput').value='食費';$('customCatInput').value='';$('customCatRow').style.display='none';$('subCatRow').style.display='none';updateResetCatBtn(); });
 $('cancelEditBtn').addEventListener('click',()=>{ resetDayForm(); renderDay(); });
 $('addBtn').addEventListener('click',()=>{
-  const date=$('dateInput').value; let category=$('catInput').value,isCustom=false;
+  const date=$('dateInput').value;
+  if(!date){alert('日付を選択してください');return;}
+  let category=$('catInput').value,isCustom=false;
   if(category==='その他'){ const c=$('customCatInput').value.trim(); if(!c){alert('カテゴリ名を入力してください');return;} category=c;isCustom=true; }
   const store=$('storeInput').value.trim(), amount=Number($('amountInput').value);
   if(!amount||amount<=0){alert('金額を入力してください');return;}
   const entry=getDayEntry(date);
   const subCat=(category==='娯楽費'&&$('subCatInput').value)||undefined;
-  if(_editingIdx!==null){
+  const isNewEntry=_editingIdx===null;
+  if(!isNewEntry){
+    if(!entry.purchases[_editingIdx]){alert('更新対象が見つかりません');resetDayForm();renderDay();return;}
     entry.purchases[_editingIdx]={...entry.purchases[_editingIdx],category,store,amount,isCustom,subCat};
   } else {
     entry.purchases.push({category,store,amount,isCustom,subCat});
@@ -930,7 +935,7 @@ $('addBtn').addEventListener('click',()=>{
   setDayEntry(date,entry);
   clearDayForm();
   renderDay();updateDatalist();
-  if(_editingIdx===null){
+  if(isNewEntry){
     // 予算オーバー警告（新規追加時のみ）
     const b=getBudget();
     if(b.monthlyVariableDefault){
@@ -1440,7 +1445,7 @@ function deleteItem(type,itemId){ const meta=loadMeta();let list;if(type==='inco
 // ==================== グローバルクリック ====================
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);resetDayForm();renderDay(); }
+  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);resetDayForm();renderDay();return; }
   if(t.dataset.editI!==undefined){
     const i=Number(t.dataset.editI),date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[i];
     if(!p)return;
