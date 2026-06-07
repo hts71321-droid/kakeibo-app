@@ -1239,7 +1239,7 @@ function renderEntertainmentSubYear(periodStart,periodEnd){
     const pct=budget>0?Math.min(100,Math.round(total/budget*100)):0;
     const col=pct>=100?'#e74c3c':pct>=80?'#e67e22':'#27ae60';
     const rem=budget-total;
-    return `<div style="margin-bottom:14px;padding:10px;background:#f8f9fa;border-radius:8px">
+    return `<div data-ent-sub-detail="${s.name}" style="margin-bottom:14px;padding:10px;background:#f8f9fa;border-radius:8px;cursor:pointer">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
         <span style="font-weight:600">${s.name}</span>
         <span style="font-weight:600">${fmt(total)}<span style="color:#aaa;font-size:.85em"> / ${budget>0?fmt(budget)+'円':'予算未設定'}</span></span>
@@ -1489,6 +1489,19 @@ document.addEventListener('click',e=>{
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);switchTab('week');return;}
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
   const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
+  const esdEl=t.closest('[data-ent-sub-detail]');
+  if(esdEl){
+    const subName=esdEl.dataset.entSubDetail;
+    const startYM=$('yearStart').value,endYM=$('yearEnd').value;
+    if(!startYM||!endYM)return;
+    const [sy,sm]=startYM.split('-').map(Number),[ey,em]=endYM.split('-').map(Number);
+    const ss=`${sy}-${pad(sm)}-01`,ee=formatYMD(new Date(ey,em,0));
+    const purchases=[];
+    Object.keys(loadDayData()).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{
+      getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));
+    });
+    showCatDetailModal(`娯楽費／${subName}`,purchases,true);return;
+  }
   const cdEl=t.closest('[data-cat-detail]');
   if(cdEl){
     const cn=cdEl.dataset.catDetail;
