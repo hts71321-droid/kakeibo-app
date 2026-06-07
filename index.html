@@ -815,33 +815,7 @@ function showCatYearDetail(catName){
   const startYM=$('yearStart').value,endYM=$('yearEnd').value;
   if(!startYM||!endYM)return;
   const [sy,sm]=startYM.split('-').map(Number),[ey,em]=endYM.split('-').map(Number);
-  const periodStart=new Date(sy,sm-1,1),periodEnd=new Date(ey,em,0);
-  // 娯楽費 + サブカテゴリあり → サブカテゴリ別で表示
-  const subs=loadMeta().entertainmentSubs||[];
-  if(catName==='娯楽費'&&subs.length){
-    const ss=formatYMD(periodStart),ee=formatYMD(periodEnd),data=loadDayData();
-    const totals={};subs.forEach(s=>totals[s.name]=0);let noSubTotal=0,grand=0;
-    Object.keys(data).filter(d=>d>=ss&&d<=ee).forEach(date=>{
-      getDayEntry(date).purchases.filter(p=>p.category==='娯楽費').forEach(p=>{
-        grand+=Number(p.amount||0);
-        if(p.subCat&&totals.hasOwnProperty(p.subCat))totals[p.subCat]+=Number(p.amount||0);
-        else if(!p.subCat)noSubTotal+=Number(p.amount||0);
-      });
-    });
-    $('catDetailTitle').textContent='娯楽費 内訳（年間）';
-    $('catDetailTotal').textContent=grand>0?`合計: ${fmt(grand)} 円`:'';
-    $('catDetailList').innerHTML=subs.map(s=>{
-      const total=totals[s.name]||0,budget=s.budget||0;
-      const pct=budget>0?Math.min(100,Math.round(total/budget*100)):0;
-      const col=pct>=100?'#e74c3c':pct>=80?'#e67e22':'#27ae60';
-      const rem=budget-total;
-      const dim=total===0?' style="opacity:.35"':'';
-      const bar=budget>0?`<div class="bbar" style="margin:3px 0 1px"><div class="bbar-fill" style="width:${pct}%;background:${col}"></div></div><div style="font-size:.75em;color:${rem>=0?'#27ae60':'#e74c3c'}">${rem>=0?`残 ${fmt(rem)}円`:`超 ${fmt(-rem)}円`}</div>`:'';
-      return `<li class="breakdown-item" style="flex-direction:column;align-items:stretch;gap:2px"${dim}><div style="display:flex;justify-content:space-between"><span class="breakdown-label">${s.name}</span><span class="breakdown-amount">${fmt(total)}円</span></div>${bar}</li>`;
-    }).join('')+(noSubTotal>0?`<li class="breakdown-item" style="opacity:.6"><span class="breakdown-label">（分類なし）</span><span class="breakdown-amount">${fmt(noSubTotal)}円</span></li>`:'');
-    $('catDetailModal').style.display='flex';return;
-  }
-  // その他カテゴリ → 月別表示
+  const periodEnd=new Date(ey,em,0);
   let cm=new Date(sy,sm-1,1);const months=[];let total=0;
   while(cm<=periodEnd){
     const ms=new Date(cm.getFullYear(),cm.getMonth(),1),me=new Date(cm.getFullYear(),cm.getMonth()+1,0);
