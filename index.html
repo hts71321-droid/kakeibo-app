@@ -616,7 +616,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1315,7 +1315,8 @@ function copyFromPrevYear(targetYear){
   const srcFixed=(meta.fixedCosts.items||[]).filter(i=>i.year===prevYear);
   const srcIncome=(meta.incomes.items||[]).filter(i=>i.year===prevYear);
   if(!srcFixed.length&&!srcIncome.length){alert(`${prevYear}年のデータがないためコピーできません`);return false;}
-  srcFixed.forEach(i=>meta.fixedCosts.items.push({...i,id:genId(),year:targetYear}));
+  const zeroAmtLabels=['電気代','ガス代','上下水道代','スマホ代'];
+  srcFixed.forEach(i=>meta.fixedCosts.items.push({...i,id:genId(),year:targetYear,months:zeroAmtLabels.includes(i.label)?{}:i.months}));
   srcIncome.forEach(i=>meta.incomes.items.push({...i,id:genId(),year:targetYear,months:{}}));
   saveMeta(meta);renderRegular();
   alert(`${prevYear}年の固定費・収入項目を${targetYear}年にコピーしました ✅\n固定費は金額をそのまま引き継ぎ、収入は金額ゼロで追加しました。`);
