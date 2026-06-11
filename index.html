@@ -462,6 +462,7 @@
       <label>📅 年</label>
       <select id="regularYear"></select>
       <button id="reorderToggle" class="btn btn-small btn-gray">📋 通常モード（タップで並べ替えモード）</button>
+      <button id="copyPrevYearBtn" class="btn btn-small btn-blue" style="margin-top:6px">📋 前年からコピー</button>
     </div>
     <div class="sub-tabs">
       <button class="sub-tab active" data-sub="income">💰 収入</button>
@@ -615,7 +616,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1308,7 +1309,34 @@ $('saveYearMemoBtn').addEventListener('click',()=>{ const meta=loadMeta();meta.y
 let currentRegularYear=new Date().getFullYear(),reorderMode=false;
 function getYearList(){ const meta=loadMeta(),years=new Set(),now=new Date().getFullYear(); for(let y=now-2;y<=now+2;y++) years.add(y); [...(meta.incomes.items||[]),...(meta.fixedCosts.items||[]),...(meta.specialExpenses.items||[])].forEach(i=>years.add(i.year)); return Array.from(years).sort(); }
 function renderYearSelect(){ $('regularYear').innerHTML=getYearList().map(y=>`<option value="${y}" ${y===currentRegularYear?'selected':''}>${y}年</option>`).join(''); }
-$('regularYear').addEventListener('change',e=>{currentRegularYear=Number(e.target.value);renderRegular();});
+function hasYearItems(year){ const meta=loadMeta(); return [...(meta.incomes.items||[]),...(meta.fixedCosts.items||[])].some(i=>i.year===year); }
+function copyFromPrevYear(targetYear){
+  const meta=loadMeta(),prevYear=targetYear-1;
+  const srcIncome=(meta.incomes.items||[]).filter(i=>i.year===prevYear);
+  const srcFixed=(meta.fixedCosts.items||[]).filter(i=>i.year===prevYear);
+  if(!srcIncome.length&&!srcFixed.length){alert(`${prevYear}年のデータがないためコピーできません`);return false;}
+  srcIncome.forEach(i=>meta.incomes.items.push({...i,id:genId(),year:targetYear}));
+  srcFixed.forEach(i=>meta.fixedCosts.items.push({...i,id:genId(),year:targetYear}));
+  saveMeta(meta);renderRegular();
+  alert(`${prevYear}年の収入・固定費を${targetYear}年にコピーしました ✅\n金額はそのまま引き継いでいます。変更が必要な項目を編集してください。`);
+  return true;
+}
+$('regularYear').addEventListener('change',e=>{
+  currentRegularYear=Number(e.target.value);
+  if(!hasYearItems(currentRegularYear)){
+    const prevYear=currentRegularYear-1;
+    if(hasYearItems(prevYear)&&confirm(`${currentRegularYear}年のデータがまだありません。\n${prevYear}年の収入・固定費をコピーしますか？\n（金額も引き継ぎます。後から編集できます）`)){
+      copyFromPrevYear(currentRegularYear);return;
+    }
+  }
+  renderRegular();
+});
+$('copyPrevYearBtn').addEventListener('click',()=>{
+  if(hasYearItems(currentRegularYear)){
+    if(!confirm(`${currentRegularYear}年にはすでにデータがあります。\n${currentRegularYear-1}年からさらにコピーしますか？`))return;
+  }
+  copyFromPrevYear(currentRegularYear);
+});
 $('reorderToggle').addEventListener('click',()=>{ reorderMode=!reorderMode;$('reorderToggle').textContent=reorderMode?'🔀 並べ替えモード ON':'📋 通常モード（タップで並べ替えモード）';$('reorderToggle').classList.toggle('btn-orange',reorderMode);$('reorderToggle').classList.toggle('btn-gray',!reorderMode);renderRegular(); });
 
 function renderRegular(){ renderYearSelect();renderIncomeSub();renderFixedSub();renderSpecialSub();renderEntertainmentSub(); }
