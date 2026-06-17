@@ -637,7 +637,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1934,8 +1934,7 @@ if(!isFirebaseConfigured){
   else $('familySetupOverlay').style.display='block';
 }
 
-// ==================== AI月次レポート ====================
-const CLAUDE_API_KEY_STORAGE='kakeibo-claude-api-key';
+// ==================== 月次レポート ====================
 function gatherMonthData(year,mIdx){
   const s=new Date(year,mIdx-1,1),e=new Date(year,mIdx,0);
   const cats=aggregateByCategory(s,e);
@@ -1945,40 +1944,90 @@ function gatherMonthData(year,mIdx){
   const special=getMonthSpecial(year,mIdx),specialTotal=special.reduce((s,i)=>s+i.amt,0);
   return {year,mIdx,label:`${year}年${mIdx}月`,varTotal,cats,fixedTotal,incomeTotal,specialTotal,budget:getBudget().monthlyVariableDefault||0};
 }
-function buildReportPrompt(cur,prev,prevYr){
-  const fmtCats=c=>Object.entries(c).filter(([,v])=>v>0).sort(([,a],[,b])=>b-a).map(([k,v])=>`  - ${k}: ${fmt(v)}円`).join('\n')||'  データなし';
-  return `あなたは家族の家計を応援するフレンドリーなサポーターです。以下のデータをもとに、温かく具体的な分析コメントを書いてください。
+function buildAutoAnalysis(cur,prev,prevYr){
+  const sign=(v,unit='円')=>(v>=0?'+':'')+fmt(v)+(unit||'');
+  const pct=(a,b)=>b>0?Math.round((a-b)/b*100):null;
 
-【今月】${cur.label}
-変動支出: ${fmt(cur.varTotal)}円（予算: ${cur.budget?fmt(cur.budget)+'円':'未設定'}）
-${fmtCats(cur.cats)}
-固定費: ${fmt(cur.fixedTotal)}円  収入: ${fmt(cur.incomeTotal)}円
-
-【先月】${prev.label}
-変動支出: ${fmt(prev.varTotal)}円
-${fmtCats(prev.cats)}
-
-【前年同月】${prevYr.label}
-変動支出: ${fmt(prevYr.varTotal)}円
-${fmtCats(prevYr.cats)}
-
----
-以下の2セクションを日本語で書いてください（各200字程度）:
-
-【📊 今月の分析】
-先月・前年同月と比べて増減が大きいカテゴリを2〜3個、具体的な金額で指摘してください。全体評価と100点満点のスコアも。
-
-【💡 来月へのアドバイス】
-具体的な改善ポイントを3点（箇条書き）と短い応援メッセージ。`;
-}
-async function callClaudeForReport(apiKey,prompt){
-  const res=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,messages:[{role:'user',content:prompt}]})
+  // カテゴリ別増減(先月比)
+  const allCats=new Set([...Object.keys(cur.cats),...Object.keys(prev.cats),...Object.keys(prevYr.cats)]);
+  const catChanges=[];
+  allCats.forEach(c=>{
+    if(!c)return;
+    const cv=cur.cats[c]||0,pv=prev.cats[c]||0,d=cv-pv;
+    if(cv>0||pv>0) catChanges.push({cat:c,cur:cv,prev:pv,diff:d});
   });
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${res.status}`);}
-  return (await res.json()).content[0].text;
+  catChanges.sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
+  const increased=catChanges.filter(x=>x.diff>500).slice(0,3);
+  const decreased=catChanges.filter(x=>x.diff<-500).slice(0,2);
+
+  // スコア計算
+  let score=80;
+  if(cur.budget>0){
+    const r=cur.varTotal/cur.budget;
+    if(r<=0.8)score+=15; else if(r<=0.9)score+=8; else if(r<=1.0)score+=3;
+    else if(r<=1.1)score-=8; else if(r<=1.2)score-=15; else score-=25;
+  }
+  const momDiff=cur.varTotal-prev.varTotal;
+  const yoyDiff=cur.varTotal-prevYr.varTotal;
+  if(prev.varTotal>0&&momDiff<0)score+=5;
+  if(prevYr.varTotal>0&&yoyDiff<0)score+=5;
+  score=Math.max(20,Math.min(100,score));
+  const scoreEmoji=score>=90?'🌟':score>=75?'😊':score>=60?'🙂':score>=45?'😐':'😅';
+
+  // 分析テキスト生成
+  let txt='【📊 今月の分析】\n';
+
+  if(prev.varTotal>0){
+    const mp=pct(cur.varTotal,prev.varTotal);
+    txt+=`変動支出は先月（${prev.label}）比 ${sign(momDiff)}円（${sign(mp,'%')}）`;
+    txt+=momDiff>0?'と増加しました。':momDiff<0?'と減少しました。':'で変わりませんでした。';
+    txt+='\n';
+  }
+  if(prevYr.varTotal>0){
+    const yp=pct(cur.varTotal,prevYr.varTotal);
+    txt+=`前年同月（${prevYr.label}）比では ${sign(yoyDiff)}円（${sign(yp,'%')}）です。\n`;
+  }
+  if(increased.length>0){
+    txt+='\n▲ 先月より増えたカテゴリ:\n';
+    increased.forEach(({cat,cur:cv,prev:pv,diff})=>{
+      txt+=`  ・${cat}: ${fmt(cv)}円（先月 ${fmt(pv)}円、+${fmt(diff)}円）\n`;
+    });
+  }
+  if(decreased.length>0){
+    txt+='\n▼ 先月より減ったカテゴリ:\n';
+    decreased.forEach(({cat,cur:cv,prev:pv,diff})=>{
+      txt+=`  ・${cat}: ${fmt(cv)}円（先月 ${fmt(pv)}円、${fmt(diff)}円）\n`;
+    });
+  }
+  if(cur.budget>0){
+    const rem=cur.budget-cur.varTotal;
+    txt+=rem>=0?`\n✅ 予算内に収まっています（残 ${fmt(rem)}円）。`:`\n⚠️ 予算を ${fmt(-rem)}円 オーバーしました。`;
+  }
+  txt+=`\n\n総合スコア: ${scoreEmoji} ${score}点 / 100点\n`;
+
+  // アドバイス生成
+  txt+='\n【💡 来月へのアドバイス】\n';
+  const advices=[];
+  increased.slice(0,2).forEach(({cat,diff})=>{
+    advices.push(`${cat}が+${fmt(diff)}円増えています。来月は特に意識してみましょう。`);
+  });
+  if(cur.budget>0){
+    if(cur.varTotal>cur.budget){
+      advices.push(`変動費が予算の${Math.round(cur.varTotal/cur.budget*100)}%に達しました。来月は週単位で進捗を確認してみてください。`);
+    } else {
+      advices.push(`予算管理が上手くいっています！この調子で来月も続けましょう。`);
+    }
+  }
+  if(decreased.length>0&&advices.length<3){
+    advices.push(`${decreased[0].cat}は${fmt(-decreased[0].diff)}円節約できました。この節約習慣を他のカテゴリにも広げてみましょう。`);
+  }
+  while(advices.length<3){
+    const extras=['支出を記録することで家計の流れが見えてきます。継続は力なり！','固定費の見直し（保険・サブスクなど）も年に一度チェックしましょう。','小さな節約の積み重ねが大きな貯蓄につながります。'];
+    advices.push(extras[advices.length-1]||extras[0]);
+  }
+  advices.slice(0,3).forEach((a,i)=>{ txt+=`${i+1}. ${a}\n`; });
+  txt+='\n来月も一緒に頑張りましょう！💪';
+  return txt;
 }
 function buildSVGChart(cur,prev,prevYr){
   const allCats=[...new Set([...Object.keys(cur.cats),...Object.keys(prev.cats),...Object.keys(prevYr.cats)])];
@@ -1987,8 +2036,7 @@ function buildSVGChart(cur,prev,prevYr){
   if(!topCats.length) return '<p style="color:#aaa;text-align:center;padding:16px">変動費データなし</p>';
   const W=520,H=170,ML=8,MR=8,MT=8,MB=48,chartW=W-ML-MR,chartH=H-MT-MB;
   const maxVal=Math.max(...topCats.flatMap(c=>[cur.cats[c]||0,prev.cats[c]||0,prevYr.cats[c]||0]),1);
-  const groupW=chartW/topCats.length;
-  const barW=Math.min(groupW*0.24,20);
+  const groupW=chartW/topCats.length,barW=Math.min(groupW*0.24,20);
   const colors=['#3498db','#bdc3c7','#a8d8ea'];
   let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
   [.25,.5,.75,1].forEach(r=>{
@@ -2008,15 +2056,8 @@ function buildSVGChart(cur,prev,prevYr){
   });
   return svg+'</svg>';
 }
-async function generateMonthlyReport(){
+function generateMonthlyReport(){
   const year=monthAnchor.getFullYear(),mIdx=monthAnchor.getMonth()+1;
-  let apiKey=localStorage.getItem(CLAUDE_API_KEY_STORAGE)||'';
-  if(!apiKey){
-    const inp=prompt('Claude APIキーを入力してください（sk-ant-...で始まるキー）\n\n※このデバイスのブラウザにのみ保存されます。');
-    if(!inp?.trim())return;
-    apiKey=inp.trim();
-    localStorage.setItem(CLAUDE_API_KEY_STORAGE,apiKey);
-  }
   const cur=gatherMonthData(year,mIdx);
   const py=mIdx===1?year-1:year,pm=mIdx===1?12:mIdx-1;
   const prev=gatherMonthData(py,pm);
@@ -2046,23 +2087,13 @@ async function generateMonthlyReport(){
       </div>
     </div>
     <div class="rpt-sec">
-      <div class="rpt-sec-ttl">🤖 AI分析 <span style="font-size:0.82em;font-weight:400;color:#aaa">Claude による自動分析</span></div>
-      <div class="rpt-comment" id="rptComment">⏳ 分析中です... しばらくお待ちください</div>
+      <div class="rpt-sec-ttl">📝 自動分析レポート</div>
+      <div class="rpt-comment">${buildAutoAnalysis(cur,prev,prevYr)}</div>
     </div>`;
-  try{
-    $('rptComment').textContent=await callClaudeForReport(apiKey,buildReportPrompt(cur,prev,prevYr));
-  }catch(e){
-    $('rptComment').innerHTML=`<span style="color:#e74c3c">⚠️ AI分析に失敗しました: ${e.message}</span><br><br><small>APIキーを確認してください。</small>`;
-  }
 }
 $('aiReportBtn').addEventListener('click',generateMonthlyReport);
 $('reportCloseBtn').addEventListener('click',()=>$('reportModal').style.display='none');
 $('reportPrintBtn').addEventListener('click',()=>window.print());
-$('reportApiKeyBtn').addEventListener('click',()=>{
-  const cur=localStorage.getItem(CLAUDE_API_KEY_STORAGE)||'';
-  const inp=prompt('Claude APIキーを入力してください',cur?cur.slice(0,20)+'...':'');
-  if(inp?.trim()){localStorage.setItem(CLAUDE_API_KEY_STORAGE,inp.trim());alert('APIキーを更新しました ✅');}
-});
 </script>
 
 <!-- ===== AI月次レポートモーダル ===== -->
@@ -2071,7 +2102,6 @@ $('reportApiKeyBtn').addEventListener('click',()=>{
     <div id="reportA4" class="report-a4"></div>
     <div id="rptBtnBar" style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
       <button id="reportPrintBtn" style="background:#8e44ad;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🖨️ 印刷 / PDF保存</button>
-      <button id="reportApiKeyBtn" style="background:#7f8c8d;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🔑 APIキー変更</button>
       <button id="reportCloseBtn" style="background:#95a5a6;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">✕ 閉じる</button>
     </div>
   </div>
