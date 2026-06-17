@@ -134,6 +134,26 @@
     #loadingScreen{text-align:center;padding:80px 16px;font-size:1em;color:#888}
     .spinner{font-size:2.5em;margin-bottom:12px;animation:spin 1.5s linear infinite;display:inline-block}
     @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    /* AI月次レポート */
+    .btn-purple{background:#8e44ad}
+    .report-a4{background:white;padding:28px 32px;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+    .rpt-title{font-size:1.25em;font-weight:700;color:#2c3e50;border-bottom:3px solid #3498db;padding-bottom:8px;margin-bottom:14px}
+    .rpt-sec{margin-bottom:18px}
+    .rpt-sec-ttl{font-size:0.88em;font-weight:700;color:#555;padding:4px 8px;background:#ecf0f1;border-radius:4px;margin-bottom:10px}
+    .rpt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+    .rpt-cell{background:#f8f9fa;border-radius:8px;padding:10px 4px;text-align:center}
+    .rpt-cell-lbl{font-size:0.68em;color:#888;margin-bottom:3px}
+    .rpt-cell-val{font-size:0.92em;font-weight:700}
+    .rpt-comment{background:#f8f9fe;border-left:4px solid #3498db;padding:12px 14px;border-radius:0 8px 8px 0;font-size:0.85em;line-height:1.8;color:#34495e;white-space:pre-wrap;word-break:break-word}
+    .rpt-legend{display:flex;gap:14px;font-size:0.76em;color:#555;margin-top:8px;justify-content:center;flex-wrap:wrap}
+    .rpt-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px;vertical-align:middle}
+    @media print{
+      body>*:not(#reportModal){display:none!important}
+      #reportModal{position:static!important;background:none!important;padding:0!important;overflow:visible!important}
+      #rptBtnBar{display:none!important}
+      .report-a4{box-shadow:none!important;padding:16px 20px}
+      @page{size:A4 portrait;margin:8mm}
+    }
   </style>
 </head>
 <body>
@@ -347,6 +367,7 @@
         <button class="vtoggle active" id="monthViewList">📋 リスト</button>
         <button class="vtoggle" id="monthViewCal">📅 カレンダー</button>
       </div>
+      <button id="aiReportBtn" class="btn btn-purple btn-small">🤖 AI月次レポートを生成</button>
     </div>
 
     <!-- カレンダービュー -->
@@ -616,7 +637,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1912,6 +1933,148 @@ if(!isFirebaseConfigured){
   if(saved) startWithFamilyCode(saved);
   else $('familySetupOverlay').style.display='block';
 }
+
+// ==================== AI月次レポート ====================
+const CLAUDE_API_KEY_STORAGE='kakeibo-claude-api-key';
+function gatherMonthData(year,mIdx){
+  const s=new Date(year,mIdx-1,1),e=new Date(year,mIdx,0);
+  const cats=aggregateByCategory(s,e);
+  const varTotal=Object.values(cats).reduce((a,b)=>a+b,0);
+  const fixed=getMonthFixed(year,mIdx),fixedTotal=fixed.reduce((s,i)=>s+i.amt,0);
+  const incomes=getMonthIncomes(year,mIdx),incomeTotal=incomes.reduce((s,i)=>s+i.amt,0);
+  const special=getMonthSpecial(year,mIdx),specialTotal=special.reduce((s,i)=>s+i.amt,0);
+  return {year,mIdx,label:`${year}年${mIdx}月`,varTotal,cats,fixedTotal,incomeTotal,specialTotal,budget:getBudget().monthlyVariableDefault||0};
+}
+function buildReportPrompt(cur,prev,prevYr){
+  const fmtCats=c=>Object.entries(c).filter(([,v])=>v>0).sort(([,a],[,b])=>b-a).map(([k,v])=>`  - ${k}: ${fmt(v)}円`).join('\n')||'  データなし';
+  return `あなたは家族の家計を応援するフレンドリーなサポーターです。以下のデータをもとに、温かく具体的な分析コメントを書いてください。
+
+【今月】${cur.label}
+変動支出: ${fmt(cur.varTotal)}円（予算: ${cur.budget?fmt(cur.budget)+'円':'未設定'}）
+${fmtCats(cur.cats)}
+固定費: ${fmt(cur.fixedTotal)}円  収入: ${fmt(cur.incomeTotal)}円
+
+【先月】${prev.label}
+変動支出: ${fmt(prev.varTotal)}円
+${fmtCats(prev.cats)}
+
+【前年同月】${prevYr.label}
+変動支出: ${fmt(prevYr.varTotal)}円
+${fmtCats(prevYr.cats)}
+
+---
+以下の2セクションを日本語で書いてください（各200字程度）:
+
+【📊 今月の分析】
+先月・前年同月と比べて増減が大きいカテゴリを2〜3個、具体的な金額で指摘してください。全体評価と100点満点のスコアも。
+
+【💡 来月へのアドバイス】
+具体的な改善ポイントを3点（箇条書き）と短い応援メッセージ。`;
+}
+async function callClaudeForReport(apiKey,prompt){
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,messages:[{role:'user',content:prompt}]})
+  });
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${res.status}`);}
+  return (await res.json()).content[0].text;
+}
+function buildSVGChart(cur,prev,prevYr){
+  const allCats=[...new Set([...Object.keys(cur.cats),...Object.keys(prev.cats),...Object.keys(prevYr.cats)])];
+  const topCats=allCats.filter(c=>c&&((cur.cats[c]||0)+(prev.cats[c]||0)+(prevYr.cats[c]||0))>0)
+    .sort((a,b)=>(cur.cats[b]||0)-(cur.cats[a]||0)).slice(0,8);
+  if(!topCats.length) return '<p style="color:#aaa;text-align:center;padding:16px">変動費データなし</p>';
+  const W=520,H=170,ML=8,MR=8,MT=8,MB=48,chartW=W-ML-MR,chartH=H-MT-MB;
+  const maxVal=Math.max(...topCats.flatMap(c=>[cur.cats[c]||0,prev.cats[c]||0,prevYr.cats[c]||0]),1);
+  const groupW=chartW/topCats.length;
+  const barW=Math.min(groupW*0.24,20);
+  const colors=['#3498db','#bdc3c7','#a8d8ea'];
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+  [.25,.5,.75,1].forEach(r=>{
+    const y=MT+chartH*(1-r),v=Math.round(maxVal*r);
+    svg+=`<line x1="${ML}" x2="${W-MR}" y1="${y}" y2="${y}" stroke="#eee" stroke-width="1"/>`;
+    svg+=`<text x="${ML}" y="${y-2}" font-size="8" fill="#bbb">${v>=10000?Math.round(v/1000)+'k':fmt(v)}</text>`;
+  });
+  topCats.forEach((cat,gi)=>{
+    const gx=ML+gi*groupW;
+    [cur.cats[cat]||0,prev.cats[cat]||0,prevYr.cats[cat]||0].forEach((v,bi)=>{
+      const bh=Math.max(Math.round(v/maxVal*chartH),v>0?2:0);
+      const x=gx+(groupW-3*barW)/2+bi*barW;
+      if(bh>0) svg+=`<rect x="${x.toFixed(1)}" y="${MT+chartH-bh}" width="${barW-1}" height="${bh}" fill="${colors[bi]}" rx="2"/>`;
+    });
+    const sc=cat.length>4?cat.slice(0,4)+'…':cat;
+    svg+=`<text x="${(gx+groupW/2).toFixed(1)}" y="${H-MB+14}" text-anchor="middle" font-size="9" fill="#666">${sc}</text>`;
+  });
+  return svg+'</svg>';
+}
+async function generateMonthlyReport(){
+  const year=monthAnchor.getFullYear(),mIdx=monthAnchor.getMonth()+1;
+  let apiKey=localStorage.getItem(CLAUDE_API_KEY_STORAGE)||'';
+  if(!apiKey){
+    const inp=prompt('Claude APIキーを入力してください（sk-ant-...で始まるキー）\n\n※このデバイスのブラウザにのみ保存されます。');
+    if(!inp?.trim())return;
+    apiKey=inp.trim();
+    localStorage.setItem(CLAUDE_API_KEY_STORAGE,apiKey);
+  }
+  const cur=gatherMonthData(year,mIdx);
+  const py=mIdx===1?year-1:year,pm=mIdx===1?12:mIdx-1;
+  const prev=gatherMonthData(py,pm);
+  const prevYr=gatherMonthData(year-1,mIdx);
+  const balance=cur.incomeTotal-cur.fixedTotal-cur.varTotal-cur.specialTotal;
+  $('reportModal').style.display='block';
+  $('reportA4').innerHTML=`
+    <div class="rpt-title">📊 ${cur.label} 家計月次レポート</div>
+    <div style="font-size:0.75em;color:#aaa;margin-bottom:16px">生成日: ${todayStr()}</div>
+    <div class="rpt-sec">
+      <div class="rpt-sec-ttl">💰 月間サマリー</div>
+      <div class="rpt-grid">
+        <div class="rpt-cell"><div class="rpt-cell-lbl">収入</div><div class="rpt-cell-val" style="color:#27ae60">${cur.incomeTotal>0?fmt(cur.incomeTotal)+'円':'—'}</div></div>
+        <div class="rpt-cell"><div class="rpt-cell-lbl">固定費</div><div class="rpt-cell-val">${cur.fixedTotal>0?fmt(cur.fixedTotal)+'円':'—'}</div></div>
+        <div class="rpt-cell"><div class="rpt-cell-lbl">変動費</div><div class="rpt-cell-val" style="color:${cur.budget&&cur.varTotal>cur.budget?'#e74c3c':'#2c3e50'}">${fmt(cur.varTotal)}円</div></div>
+        <div class="rpt-cell"><div class="rpt-cell-lbl">収支</div><div class="rpt-cell-val" style="color:${balance>=0?'#27ae60':'#e74c3c'}">${cur.incomeTotal>0?(balance>=0?'+':'')+fmt(balance)+'円':'—'}</div></div>
+      </div>
+      ${cur.budget?`<div style="font-size:0.78em;color:#888;text-align:center;margin-top:4px">変動費予算 ${fmt(cur.budget)}円 &nbsp;${cur.varTotal<=cur.budget?'✅ 予算内（残 '+fmt(cur.budget-cur.varTotal)+'円）':'⚠️ 超過 '+fmt(cur.varTotal-cur.budget)+'円'}</div>`:''}
+    </div>
+    <div class="rpt-sec">
+      <div class="rpt-sec-ttl">📈 変動費カテゴリ別比較</div>
+      ${buildSVGChart(cur,prev,prevYr)}
+      <div class="rpt-legend">
+        <span><span class="rpt-dot" style="background:#3498db"></span>今月（${cur.label}）</span>
+        <span><span class="rpt-dot" style="background:#bdc3c7"></span>先月（${prev.label}）</span>
+        <span><span class="rpt-dot" style="background:#a8d8ea"></span>前年同月（${prevYr.label}）</span>
+      </div>
+    </div>
+    <div class="rpt-sec">
+      <div class="rpt-sec-ttl">🤖 AI分析 <span style="font-size:0.82em;font-weight:400;color:#aaa">Claude による自動分析</span></div>
+      <div class="rpt-comment" id="rptComment">⏳ 分析中です... しばらくお待ちください</div>
+    </div>`;
+  try{
+    $('rptComment').textContent=await callClaudeForReport(apiKey,buildReportPrompt(cur,prev,prevYr));
+  }catch(e){
+    $('rptComment').innerHTML=`<span style="color:#e74c3c">⚠️ AI分析に失敗しました: ${e.message}</span><br><br><small>APIキーを確認してください。</small>`;
+  }
+}
+$('aiReportBtn').addEventListener('click',generateMonthlyReport);
+$('reportCloseBtn').addEventListener('click',()=>$('reportModal').style.display='none');
+$('reportPrintBtn').addEventListener('click',()=>window.print());
+$('reportApiKeyBtn').addEventListener('click',()=>{
+  const cur=localStorage.getItem(CLAUDE_API_KEY_STORAGE)||'';
+  const inp=prompt('Claude APIキーを入力してください',cur?cur.slice(0,20)+'...':'');
+  if(inp?.trim()){localStorage.setItem(CLAUDE_API_KEY_STORAGE,inp.trim());alert('APIキーを更新しました ✅');}
+});
 </script>
+
+<!-- ===== AI月次レポートモーダル ===== -->
+<div id="reportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
+  <div style="max-width:794px;margin:0 auto">
+    <div id="reportA4" class="report-a4"></div>
+    <div id="rptBtnBar" style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button id="reportPrintBtn" style="background:#8e44ad;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🖨️ 印刷 / PDF保存</button>
+      <button id="reportApiKeyBtn" style="background:#7f8c8d;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🔑 APIキー変更</button>
+      <button id="reportCloseBtn" style="background:#95a5a6;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">✕ 閉じる</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
