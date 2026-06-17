@@ -147,13 +147,6 @@
     .rpt-comment{background:#f8f9fe;border-left:4px solid #3498db;padding:12px 14px;border-radius:0 8px 8px 0;font-size:0.85em;line-height:1.8;color:#34495e;white-space:pre-wrap;word-break:break-word}
     .rpt-legend{display:flex;gap:14px;font-size:0.76em;color:#555;margin-top:8px;justify-content:center;flex-wrap:wrap}
     .rpt-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px;vertical-align:middle}
-    @media print{
-      body>*:not(#reportModal){display:none!important}
-      #reportModal{position:static!important;background:none!important;padding:0!important;overflow:visible!important}
-      #rptBtnBar{display:none!important}
-      .report-a4{box-shadow:none!important;padding:16px 20px}
-      @page{size:A4 portrait;margin:8mm}
-    }
   </style>
 </head>
 <body>
@@ -637,7 +630,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -2093,7 +2086,30 @@ function generateMonthlyReport(){
 }
 $('aiReportBtn').addEventListener('click',generateMonthlyReport);
 $('reportCloseBtn').addEventListener('click',()=>$('reportModal').style.display='none');
-$('reportPrintBtn').addEventListener('click',()=>window.print());
+$('reportPrintBtn').addEventListener('click',()=>{
+  const content=$('reportA4').innerHTML;
+  const css=`
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,"Hiragino Sans",sans-serif;padding:20px;background:white;color:#333}
+    .rpt-title{font-size:1.2em;font-weight:700;color:#2c3e50;border-bottom:3px solid #3498db;padding-bottom:8px;margin-bottom:14px}
+    .rpt-sec{margin-bottom:16px}
+    .rpt-sec-ttl{font-size:0.88em;font-weight:700;color:#555;padding:4px 8px;background:#ecf0f1;border-radius:4px;margin-bottom:10px}
+    .rpt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+    .rpt-cell{background:#f8f9fa;border-radius:8px;padding:10px 4px;text-align:center}
+    .rpt-cell-lbl{font-size:0.68em;color:#888;margin-bottom:3px}
+    .rpt-cell-val{font-size:0.92em;font-weight:700}
+    .rpt-comment{background:#f8f9fe;border-left:4px solid #3498db;padding:12px 14px;border-radius:0 8px 8px 0;font-size:0.85em;line-height:1.8;color:#34495e;white-space:pre-wrap;word-break:break-word}
+    .rpt-legend{display:flex;gap:14px;font-size:0.76em;color:#555;margin-top:8px;justify-content:center;flex-wrap:wrap}
+    .rpt-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px;vertical-align:middle}
+    @page{size:A4;margin:10mm}`;
+  const html=`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>家計月次レポート</title><style>${css}</style></head><body>${content}</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('ポップアップがブロックされています。ブラウザの設定でこのサイトのポップアップを許可してください。');return;}
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{try{w.print();}catch(e){}},400);
+});
 </script>
 
 <!-- ===== AI月次レポートモーダル ===== -->
