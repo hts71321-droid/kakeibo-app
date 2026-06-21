@@ -636,7 +636,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -846,7 +846,8 @@ function showCatDetailModal(title,purchases,showDate){
   $('catDetailTotal').textContent=purchases.length?`合計: ${fmt(total)} 円`:'';
   $('catDetailList').innerHTML=purchases.length?purchases.map(p=>{
     const ds=showDate?`<span style="color:#888;font-size:.85em;margin-right:5px">${p.date.slice(5).replace('-','/')}</span>`:'';
-    return `<li class="breakdown-item"><span class="breakdown-label">${ds}${p.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(p.amount)}円</span></li>`;
+    const jump=p.date?` data-jump="${p.date}" style="cursor:pointer"`:'' ;
+    return `<li class="breakdown-item"${jump}><span class="breakdown-label">${ds}${p.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(p.amount)}円</span></li>`;
   }).join(''):'<li class="empty">データなし</li>';
   $('catDetailModal').style.display='flex';
 }
