@@ -579,6 +579,7 @@
       <ul id="catDetailList" class="breakdown-list" style="overflow-y:auto;flex:1;margin:0 -20px;padding:0 20px"></ul>
       <div class="modal-footer">
         <div id="catDetailTotal" style="text-align:right;font-weight:600;margin-bottom:8px;color:#2c3e50"></div>
+        <button id="catDetailBackBtn" class="btn btn-gray" style="display:none;margin-top:0;margin-bottom:8px">← 戻る</button>
         <button id="catDetailCloseBtn" class="btn btn-gray" style="margin-top:0">閉じる</button>
       </div>
     </div>
@@ -632,9 +633,10 @@ let _isFirebaseMode = false, _familyCode = null;
 let _dbRef = null, _daysRef = null, _metaRef = null;
 let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
+let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1290,7 +1292,68 @@ function renderYearBudget(year){
   }else{
     html+=`<div class="summary-row" style="color:#e74c3c;font-weight:700"><span>⚠️ 年間予算超過</span><span>${fmt(-remaining)} 円オーバー</span></div>`;
   }
+  // カテゴリ別内訳
+  const cb=b.categories||{};
+  const yearCats=aggregateByCategory(new Date(year,0,1),new Date(year,lastMonth,0));
+  const catRows=[];
+  STD_CATS.forEach(cat=>{
+    const actual=yearCats[cat]||0,annCb=(cb[cat]||0)*12;
+    if(actual||annCb) catRows.push({cat,actual,annCb});
+  });
+  Object.keys(yearCats).forEach(cat=>{if(cat&&!STD_CATS.includes(cat)&&yearCats[cat]>0) catRows.push({cat,actual:yearCats[cat],annCb:0});});
+  if(catRows.length){
+    html+=`<div style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:8px"><div style="font-size:.82em;font-weight:700;color:#555;margin-bottom:6px">カテゴリ別 <span style="font-weight:400;color:#aaa">（タップで月別明細）</span></div>`;
+    catRows.forEach(({cat,actual,annCb})=>{
+      const pct2=annCb>0?Math.min(100,Math.round(actual/annCb*100)):0;
+      const col2=pct2>=100?'#e74c3c':pct2>=80?'#e67e22':'#27ae60';
+      const rem2=annCb-actual;
+      html+=`<div data-year-cat-detail="${cat}|${year}" style="padding:7px 4px;border-bottom:1px solid #f5f5f5;cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:.88em;color:#555">${cat}</span>
+          <span style="font-weight:600;font-size:.88em">${fmt(actual)}${annCb?`<span style="color:#aaa;font-size:.82em"> / ${fmt(annCb)}円</span>`:' 円'}</span>
+        </div>
+        ${annCb?`<div class="bbar" style="margin:3px 0 1px"><div class="bbar-fill" style="width:${pct2}%;background:${col2}"></div></div><div style="font-size:.72em;text-align:right;color:${rem2>=0?'#27ae60':'#e74c3c'}">${rem2>=0?'残 '+fmt(rem2)+'円':'超 '+fmt(-rem2)+'円'}</div>`:''}
+      </div>`;
+    });
+    html+='</div>';
+  }
   $('yearBudgetSummary').innerHTML=html;
+}
+
+function showYearCatMonths(catName,year){
+  _catDetailBackFn=null; $('catDetailBackBtn').style.display='none';
+  const now=new Date(),lastMonth=year<now.getFullYear()?12:year===now.getFullYear()?now.getMonth()+1:1;
+  const months=[];
+  for(let m=1;m<=lastMonth;m++){
+    const amt=(aggregateByCategory(new Date(year,m-1,1),new Date(year,m,0))[catName])||0;
+    months.push({label:`${m}月`,amount:amt,m});
+  }
+  const total=months.reduce((s,x)=>s+x.amount,0);
+  $('catDetailTitle').textContent=`${catName}（${year}年）`;
+  $('catDetailTotal').textContent=`年間合計: ${fmt(total)} 円`;
+  $('catDetailList').innerHTML=months.map(({label,amount,m})=>{
+    const dimmed=amount===0?' style="opacity:.35"':'';
+    return `<li class="breakdown-item" data-year-cat-month="${catName}|${year}|${m}"${dimmed}><span class="breakdown-label">${label}</span><span class="breakdown-amount">${fmt(amount)}円</span></li>`;
+  }).join('');
+  $('catDetailModal').style.display='flex';
+}
+function showEntSubMonths(subName,year){
+  _catDetailBackFn=null; $('catDetailBackBtn').style.display='none';
+  const now=new Date(),lastMonth=year<now.getFullYear()?12:year===now.getFullYear()?now.getMonth()+1:1;
+  const data=loadDayData(),months=[];
+  for(let m=1;m<=lastMonth;m++){
+    const ss=formatYMD(new Date(year,m-1,1)),ee=formatYMD(new Date(year,m,0));
+    const amt=Object.keys(data).filter(d=>d>=ss&&d<=ee).reduce((s,date)=>s+getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).reduce((s2,p)=>s2+Number(p.amount||0),0),0);
+    months.push({label:`${m}月`,amount:amt,m});
+  }
+  const total=months.reduce((s,x)=>s+x.amount,0);
+  $('catDetailTitle').textContent=`🎮 ${subName}（${year}年）`;
+  $('catDetailTotal').textContent=`年間合計: ${fmt(total)} 円`;
+  $('catDetailList').innerHTML=months.map(({label,amount,m})=>{
+    const dimmed=amount===0?' style="opacity:.35"':'';
+    return `<li class="breakdown-item" data-ent-sub-month="${subName}|${year}|${m}"${dimmed}><span class="breakdown-label">${label}</span><span class="breakdown-amount">${fmt(amount)}円</span></li>`;
+  }).join('');
+  $('catDetailModal').style.display='flex';
 }
 
 function renderEntertainmentSubYear(periodStart,periodEnd){
@@ -1590,28 +1653,26 @@ document.addEventListener('click',e=>{
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
   const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
   const esdEl=t.closest('[data-ent-sub-detail]');
-  if(esdEl){
-    const subName=esdEl.dataset.entSubDetail;
-    const startYM=$('yearStart').value,endYM=$('yearEnd').value;
-    if(!startYM||!endYM)return;
-    const [sy,sm]=startYM.split('-').map(Number),[ey,em]=endYM.split('-').map(Number);
-    const periodEnd=new Date(ey,em,0);
-    let cm=new Date(sy,sm-1,1);const months=[];let total=0;
-    while(cm<=periodEnd){
-      const ms=new Date(cm.getFullYear(),cm.getMonth(),1),me=new Date(cm.getFullYear(),cm.getMonth()+1,0);
-      const ss2=formatYMD(ms),ee2=formatYMD(me),data=loadDayData();
-      const amt=Object.keys(data).filter(d=>d>=ss2&&d<=ee2).reduce((s,date)=>s+getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).reduce((s2,p)=>s2+Number(p.amount||0),0),0);
-      total+=amt;
-      months.push({ym:`${cm.getFullYear()}-${pad(cm.getMonth()+1)}`,label:`${cm.getFullYear()}年${cm.getMonth()+1}月`,amount:amt});
-      cm=new Date(cm.getFullYear(),cm.getMonth()+1,1);
-    }
-    $('catDetailTitle').textContent=`娯楽費／${subName} 月別`;
-    $('catDetailTotal').textContent=total>0?`合計: ${fmt(total)} 円`:'';
-    $('catDetailList').innerHTML=months.map(m=>{
-      const dimmed=m.amount===0?' style="opacity:.35"':'';
-      return `<li class="breakdown-item" data-jump-month="${m.ym}"${dimmed}><span class="breakdown-label">${m.label}</span><span class="breakdown-amount">${fmt(m.amount)}円</span></li>`;
-    }).join('');
-    $('catDetailModal').style.display='flex';return;
+  if(esdEl){ showEntSubMonths(esdEl.dataset.entSubDetail,yearAnchor.getFullYear()); return; }
+  const esmEl=t.closest('[data-ent-sub-month]');
+  if(esmEl){
+    const [subName,yearStr,mStr]=esmEl.dataset.entSubMonth.split('|');
+    const y=Number(yearStr),m=Number(mStr);
+    const ss=formatYMD(new Date(y,m-1,1)),ee=formatYMD(new Date(y,m,0)),data=loadDayData(),purchases=[];
+    Object.keys(data).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{getDayEntry(date).purchases.filter(p=>p.category==='娯楽費'&&(p.subCat||'')===subName).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));});
+    _catDetailBackFn=()=>showEntSubMonths(subName,y); $('catDetailBackBtn').style.display='block';
+    showCatDetailModal(`🎮 ${subName} ${y}年${m}月`,purchases,true); return;
+  }
+  const ycdEl=t.closest('[data-year-cat-detail]');
+  if(ycdEl){ const [catName,yearStr]=ycdEl.dataset.yearCatDetail.split('|'); showYearCatMonths(catName,Number(yearStr)); return; }
+  const ycmEl=t.closest('[data-year-cat-month]');
+  if(ycmEl){
+    const [catName,yearStr,mStr]=ycmEl.dataset.yearCatMonth.split('|');
+    const y=Number(yearStr),m=Number(mStr);
+    const ss=formatYMD(new Date(y,m-1,1)),ee=formatYMD(new Date(y,m,0)),data=loadDayData(),purchases=[];
+    Object.keys(data).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{getDayEntry(date).purchases.filter(p=>(p.category||'')===catName).forEach(p=>purchases.push({date,store:p.store||'',amount:p.amount}));});
+    _catDetailBackFn=()=>showYearCatMonths(catName,y); $('catDetailBackBtn').style.display='block';
+    showCatDetailModal(`${catName} ${y}年${m}月`,purchases,true); return;
   }
   const cdEl=t.closest('[data-cat-detail]');
   if(cdEl){
@@ -1636,7 +1697,8 @@ document.addEventListener('click',e=>{
     }
     return;
   }
-  if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'||t.id==='catDetailModal'){$('catDetailModal').style.display='none';return;}
+  if(t.id==='catDetailBackBtn'){if(_catDetailBackFn){_catDetailBackFn();} return;}
+  if(t.id==='catDetailCloseBtn'||t.id==='catDetailCloseTop'||t.id==='catDetailModal'){$('catDetailModal').style.display='none';_catDetailBackFn=null;$('catDetailBackBtn').style.display='none';return;}
   if(t.id==='addPersonBtn') addPerson();
   if(t.id==='addFixedCatBtn') addCategory('fixed');
   if(t.id==='addSpecialCatBtn') addCategory('special');
