@@ -449,6 +449,10 @@
       </div>
     </div>
     <div class="card"><h2>💼 期間収支サマリー</h2><div id="yearSummary"></div></div>
+    <div class="card" id="yearBudgetCard" style="display:none">
+      <h2>💰 年間変動費 予算対比</h2>
+      <div id="yearBudgetSummary"></div>
+    </div>
     <div class="card">
       <h2>📊 前年比（変動支出）</h2>
       <div id="yearComparison"></div>
@@ -630,7 +634,7 @@ let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1249,8 +1253,44 @@ function renderYear(){
     <div class="summary-row expense"><span>🎉 特別出費合計</span><span>${fmt(yearSp)} 円</span></div>
     <div class="summary-row balance ${yb>=0?'positive':'negative'}"><span>💼 期間収支</span><span>${yb>=0?'+':''}${fmt(yb)} 円</span></div>`;
   renderYearComparison(year,startYM,endYM,sy,sm,ey,em,periodEnd);
+  renderYearBudget(year);
   renderEntertainmentSubYear(periodStart,periodEnd);
   $('yearMemo').value=loadMeta().yearMemo[year]||'';
+}
+
+function renderYearBudget(year){
+  const b=getBudget();
+  if(!b.monthlyVariableDefault){$('yearBudgetCard').style.display='none';return;}
+  $('yearBudgetCard').style.display='block';
+  const annualBudget=b.monthlyVariableDefault*12;
+  // 年間の実績（1月〜12月 or 1月〜今月）
+  const now=new Date();
+  const isCurrentYear=year===now.getFullYear();
+  const lastMonth=isCurrentYear?now.getMonth()+1:12;
+  let actualFull=0;
+  for(let m=1;m<=lastMonth;m++){
+    actualFull+=aggregatePeriodTotal(new Date(year,m-1,1),new Date(year,m,0));
+  }
+  const remaining=annualBudget-actualFull;
+  const pct=Math.min(100,Math.round(actualFull/annualBudget*100));
+  const col=pct>=100?'#e74c3c':pct>=80?'#e67e22':'#27ae60';
+  const rangeLabel=isCurrentYear?`1月〜${lastMonth}月実績`:'年間実績';
+  let html=`
+    <div class="summary-row"><span>📊 月間予算</span><span>${fmt(b.monthlyVariableDefault)} 円</span></div>
+    <div class="summary-sub"><span>　× 12ヶ月 = 年間予算</span><span>${fmt(annualBudget)} 円</span></div>
+    <div class="summary-row"><span>🛒 ${rangeLabel}</span><span>${fmt(actualFull)} 円</span></div>
+    <div class="bbar" style="margin:8px 0"><div class="bbar-fill" style="width:${pct}%;background:${col}"></div></div>
+    <div style="text-align:right;font-size:.78em;color:#888;margin-bottom:8px">${pct}%使用</div>`;
+  if(remaining>=0){
+    html+=`<div class="summary-row" style="color:#27ae60;font-weight:700"><span>✅ 年間残り予算</span><span>${fmt(remaining)} 円</span></div>`;
+    if(isCurrentYear&&lastMonth<12){
+      const remMonths=12-lastMonth;
+      html+=`<div class="summary-sub"><span>　残り${remMonths}ヶ月、月あたり使える金額</span><span>${fmt(Math.round(remaining/remMonths))} 円</span></div>`;
+    }
+  }else{
+    html+=`<div class="summary-row" style="color:#e74c3c;font-weight:700"><span>⚠️ 年間予算超過</span><span>${fmt(-remaining)} 円オーバー</span></div>`;
+  }
+  $('yearBudgetSummary').innerHTML=html;
 }
 
 function renderEntertainmentSubYear(periodStart,periodEnd){
