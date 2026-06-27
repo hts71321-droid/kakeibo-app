@@ -636,7 +636,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -708,6 +708,8 @@ function loadMeta(){
     if(raw.fixedCosts){ raw.fixedCosts.items=norm(raw.fixedCosts.items); raw.fixedCosts.categories=norm(raw.fixedCosts.categories); }
     if(raw.specialExpenses){ raw.specialExpenses.items=norm(raw.specialExpenses.items); raw.specialExpenses.categories=norm(raw.specialExpenses.categories); raw.specialExpenses.transactions=norm(raw.specialExpenses.transactions); }
     raw.entertainmentSubs=norm(raw.entertainmentSubs);
+    // メモ類はFirebaseが空オブジェクトを保存しないため未定義になりうる。必ず{}を保証する
+    raw.weekMemo=raw.weekMemo||{}; raw.monthMemo=raw.monthMemo||{}; raw.yearMemo=raw.yearMemo||{};
     return raw;
   }
   if(!_isFirebaseMode&&(Array.isArray(raw.incomes)||Array.isArray(raw.fixedCosts))) localStorage.setItem(BACKUP_KEY,JSON.stringify(raw));
