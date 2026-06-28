@@ -191,7 +191,10 @@
   <div id="syncBar">
     <span id="syncStatus">🔄 接続中...</span>
     <span id="appVersion" style="font-size:.75em;color:#aaa;margin-left:6px"></span>
-    <button id="changeFamilyCodeBtn">コード変更</button>
+    <span style="display:flex;gap:10px;align-items:center">
+      <button id="openSearchBtn" style="background:none;border:none;color:#3498db;font-size:1em;cursor:pointer;padding:0">🔍 検索</button>
+      <button id="changeFamilyCodeBtn">コード変更</button>
+    </span>
   </div>
 
   <div class="tabs-sticky">
@@ -585,6 +588,35 @@
     </div>
   </div>
 
+  <!-- ========== 検索モーダル ========== -->
+  <div class="modal-overlay" id="searchModal" style="display:none">
+    <div class="modal-content" style="display:flex;flex-direction:column;max-height:85vh;padding-bottom:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0;font-size:1.05em">🔍 明細を検索</h2>
+        <button id="searchCloseTop" style="background:none;border:none;font-size:1.4em;cursor:pointer;padding:4px;touch-action:manipulation">✕</button>
+      </div>
+      <div class="row" style="gap:6px">
+        <input type="number" id="searchAmount" inputmode="numeric" placeholder="金額（例: 1500）" style="flex:2">
+        <input type="text" id="searchStore" placeholder="店名・内容（任意）" style="flex:2">
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:.82em;color:#888">
+        <label style="margin:0;flex:0">金額の許容差</label>
+        <select id="searchTolerance" style="flex:0;width:auto;padding:6px">
+          <option value="0">完全一致</option>
+          <option value="100">±100円</option>
+          <option value="500">±500円</option>
+          <option value="1000">±1000円</option>
+        </select>
+      </div>
+      <button id="searchRunBtn" class="btn btn-blue" style="margin-top:10px">検索する</button>
+      <ul id="searchResultList" class="breakdown-list" style="overflow-y:auto;flex:1;margin:10px -20px 0;padding:0 20px"></ul>
+      <div class="modal-footer">
+        <div id="searchResultTotal" style="text-align:right;font-weight:600;margin-bottom:8px;color:#2c3e50"></div>
+        <button id="searchCloseBtn" class="btn btn-gray" style="margin-top:0">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== 12ヶ月入力モーダル ========== -->
   <div class="modal-overlay" id="monthInputModal" style="display:none">
     <div class="modal-content">
@@ -636,7 +668,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1651,7 +1683,7 @@ document.addEventListener('click',e=>{
     $('addBtn').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
-  const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;$('catDetailModal').style.display='none';switchTab('day');return;}
+  const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;$('catDetailModal').style.display='none';$('searchModal').style.display='none';switchTab('day');renderDay();return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);$('catDetailModal').style.display='none';switchTab('week');return;}
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
   const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
@@ -2215,6 +2247,39 @@ $('reportPrintBtn').addEventListener('click',()=>{
   w.focus();
   setTimeout(()=>{try{w.print();}catch(e){}},400);
 });
+
+// ==================== 検索 ====================
+function runSearch(){
+  const amount=Number($('searchAmount').value);
+  const storeQ=$('searchStore').value.trim().toLowerCase();
+  const tol=Number($('searchTolerance').value)||0;
+  if(!amount&&!storeQ){ $('searchResultList').innerHTML='<li class="empty">金額または店名を入力してください</li>';$('searchResultTotal').textContent='';return; }
+  const data=loadDayData(),results=[];
+  Object.keys(data).forEach(date=>{
+    getDayEntry(date).purchases.forEach(p=>{
+      const amt=Number(p.amount||0);
+      const amtOk=!amount||Math.abs(amt-amount)<=tol;
+      const storeOk=!storeQ||((p.store||'').toLowerCase().includes(storeQ))||((p.category||'').toLowerCase().includes(storeQ));
+      if(amtOk&&storeOk) results.push({date,category:p.category||'',store:p.store||'',amount:amt});
+    });
+  });
+  results.sort((a,b)=>b.date.localeCompare(a.date));
+  if(!results.length){ $('searchResultList').innerHTML='<li class="empty">該当する明細はありません</li>';$('searchResultTotal').textContent='';return; }
+  const total=results.reduce((s,r)=>s+r.amount,0);
+  $('searchResultList').innerHTML=results.map(r=>{
+    const d=`<span style="color:#888;font-size:.85em;margin-right:5px">${r.date.replace(/-/g,'/').slice(2)}</span>`;
+    const cat=`<span class="entry-cat" style="font-size:.72em;margin-right:5px">${r.category}</span>`;
+    return `<li class="breakdown-item" data-jump="${r.date}" style="cursor:pointer"><span class="breakdown-label">${d}${cat}${r.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(r.amount)}円</span></li>`;
+  }).join('');
+  $('searchResultTotal').textContent=`${results.length}件 / 合計 ${fmt(total)} 円`;
+}
+$('openSearchBtn').addEventListener('click',()=>{ $('searchModal').style.display='flex'; setTimeout(()=>$('searchAmount').focus(),100); });
+$('searchRunBtn').addEventListener('click',runSearch);
+$('searchAmount').addEventListener('keydown',e=>{ if(e.key==='Enter')runSearch(); });
+$('searchStore').addEventListener('keydown',e=>{ if(e.key==='Enter')runSearch(); });
+$('searchCloseBtn').addEventListener('click',()=>$('searchModal').style.display='none');
+$('searchCloseTop').addEventListener('click',()=>$('searchModal').style.display='none');
+$('searchModal').addEventListener('click',e=>{ if(e.target.id==='searchModal')$('searchModal').style.display='none'; });
 </script>
 
 <!-- ===== AI月次レポートモーダル ===== -->
