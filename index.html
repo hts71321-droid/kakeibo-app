@@ -644,6 +644,17 @@
   </div>
 </div><!-- #appContent -->
 
+<!-- ===== AI月次レポートモーダル ===== -->
+<div id="reportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
+  <div style="max-width:794px;margin:0 auto">
+    <div id="reportA4" class="report-a4"></div>
+    <div id="rptBtnBar" style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+      <button id="reportPrintBtn" style="background:#8e44ad;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🖨️ 印刷 / PDF保存</button>
+      <button id="reportCloseBtn" style="background:#95a5a6;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">✕ 閉じる</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ==================== Firebase設定 ====================
 // ↓ ここをご自身のFirebaseプロジェクトの設定値に書き換えてください ↓
@@ -668,7 +679,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -2281,16 +2292,5 @@ $('searchCloseBtn').addEventListener('click',()=>$('searchModal').style.display=
 $('searchCloseTop').addEventListener('click',()=>$('searchModal').style.display='none');
 $('searchModal').addEventListener('click',e=>{ if(e.target.id==='searchModal')$('searchModal').style.display='none'; });
 </script>
-
-<!-- ===== AI月次レポートモーダル ===== -->
-<div id="reportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
-  <div style="max-width:794px;margin:0 auto">
-    <div id="reportA4" class="report-a4"></div>
-    <div id="rptBtnBar" style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
-      <button id="reportPrintBtn" style="background:#8e44ad;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">🖨️ 印刷 / PDF保存</button>
-      <button id="reportCloseBtn" style="background:#95a5a6;color:white;border:none;padding:12px 24px;border-radius:10px;font-size:1em;cursor:pointer;font-weight:600">✕ 閉じる</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
