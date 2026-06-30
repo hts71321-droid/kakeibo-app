@@ -404,6 +404,10 @@
         <div id="monthComparison"></div>
       </div>
       <div class="card">
+        <h2>📉 直近12ヶ月の推移（変動支出）<span class="hint">（棒タップでその月へ）</span></h2>
+        <div id="monthTrend"></div>
+      </div>
+      <div class="card">
         <h2>📌 この月の固定費</h2>
         <div id="monthFixedList"></div>
         <div class="total" id="monthFixedTotal">固定費合計: 0 円</div>
@@ -464,6 +468,14 @@
       <h2>🗓️ 月別合計（変動支出）</h2>
       <ul id="yearMonthList" class="breakdown-list"></ul>
       <div class="total" id="yearVarTotal">変動支出合計: 0 円</div>
+    </div>
+    <div class="card">
+      <h2>📉 月別推移（変動支出）</h2>
+      <div id="yearMonthTrend"></div>
+    </div>
+    <div class="card">
+      <h2>📊 年別推移（過去5年・変動支出）<span class="hint">（棒タップでその年へ）</span></h2>
+      <div id="yearTrend"></div>
     </div>
     <div class="card"><h2>📊 カテゴリ別合計（変動支出）</h2><ul id="yearCategoryList" class="breakdown-list"></ul></div>
     <div class="card" id="entertainmentYearCard" style="display:none">
@@ -679,7 +691,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1157,6 +1169,7 @@ function renderMonth(){
 
   renderMonthBudget(year,mIdx,varTotal);
   renderMonthComparison(year,mIdx);
+  renderMonthTrend(year,mIdx);
   renderMonthCC(ym);
   $('monthMemo').value=loadMeta().monthMemo[ym]||'';
 }
@@ -1177,6 +1190,56 @@ function renderMonthBudget(year,mIdx,varTotal){
       <span>${rem>=0?'✅ 残り':'⚠️ オーバー'}</span><span>${rem>=0?'':'-'}${fmt(Math.abs(rem))} 円</span>
     </div>`;
   $('monthBudgetSummary').innerHTML=html;
+}
+
+// 推移グラフ（棒+折れ線）。points=[{label,value,jump?}] jumpはdata属性名と値の配列[attr,val]
+function buildTrendChart(points,opts={}){
+  if(!points.length) return '<p style="color:#aaa;text-align:center;padding:12px">データなし</p>';
+  const W=520,H=190,ML=8,MR=8,MT=12,MB=46,chartW=W-ML-MR,chartH=H-MT-MB;
+  const maxVal=Math.max(...points.map(p=>p.value),1);
+  const n=points.length,slot=chartW/n,barW=Math.min(slot*0.5,26);
+  const avg=opts.avg||0;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+  [.25,.5,.75,1].forEach(r=>{
+    const y=MT+chartH*(1-r),v=Math.round(maxVal*r);
+    svg+=`<line x1="${ML}" x2="${W-MR}" y1="${y}" y2="${y}" stroke="#eee" stroke-width="1"/>`;
+    svg+=`<text x="${ML}" y="${y-2}" font-size="8" fill="#bbb">${v>=10000?Math.round(v/1000)+'k':fmt(v)}</text>`;
+  });
+  // 予算/平均ライン
+  if(avg>0&&avg<=maxVal){
+    const y=MT+chartH*(1-avg/maxVal);
+    svg+=`<line x1="${ML}" x2="${W-MR}" y1="${y}" y2="${y}" stroke="#e67e22" stroke-width="1.2" stroke-dasharray="4 3"/>`;
+    svg+=`<text x="${W-MR}" y="${y-2}" font-size="8" fill="#e67e22" text-anchor="end">予算 ${fmt(avg)}</text>`;
+  }
+  const cx=i=>ML+slot*i+slot/2;
+  const cy=v=>MT+chartH-Math.max(Math.round(v/maxVal*chartH),v>0?2:0);
+  // 棒
+  points.forEach((p,i)=>{
+    const bh=Math.max(Math.round(p.value/maxVal*chartH),p.value>0?2:0);
+    const x=cx(i)-barW/2;
+    const over=avg>0&&p.value>avg;
+    const ja=p.jump?` data-${p.jump[0]}="${p.jump[1]}" style="cursor:pointer"`:'';
+    svg+=`<rect x="${x.toFixed(1)}" y="${MT+chartH-bh}" width="${barW.toFixed(1)}" height="${bh}" fill="${over?'#e74c3c':'#3498db'}" opacity="0.85" rx="2"${ja}/>`;
+  });
+  // 折れ線
+  const line=points.map((p,i)=>`${cx(i).toFixed(1)},${cy(p.value).toFixed(1)}`).join(' ');
+  svg+=`<polyline points="${line}" fill="none" stroke="#2c3e50" stroke-width="1.5"/>`;
+  points.forEach((p,i)=>{ svg+=`<circle cx="${cx(i).toFixed(1)}" cy="${cy(p.value).toFixed(1)}" r="2.5" fill="#2c3e50"/>`; });
+  // ラベル
+  points.forEach((p,i)=>{
+    svg+=`<text x="${cx(i).toFixed(1)}" y="${H-MB+14}" text-anchor="middle" font-size="8.5" fill="#666">${p.label}</text>`;
+    if(p.value>0) svg+=`<text x="${cx(i).toFixed(1)}" y="${H-MB+26}" text-anchor="middle" font-size="7.5" fill="#aaa">${p.value>=10000?Math.round(p.value/1000)+'k':fmt(p.value)}</text>`;
+  });
+  return svg+'</svg>';
+}
+function renderMonthTrend(year,mIdx){
+  const points=[]; const b=getBudget();
+  for(let k=11;k>=0;k--){
+    const d=new Date(year,mIdx-1-k,1),y=d.getFullYear(),m=d.getMonth()+1;
+    const v=aggregatePeriodTotal(new Date(y,m-1,1),new Date(y,m,0));
+    points.push({label:`${m}月`,value:v,jump:['jump-month',`${y}-${pad(m)}`]});
+  }
+  $('monthTrend').innerHTML=buildTrendChart(points,{avg:b.monthlyVariableDefault||0});
 }
 
 function renderMonthComparison(year,mIdx){
@@ -1302,6 +1365,17 @@ function renderYear(){
     <div class="summary-row balance ${yb>=0?'positive':'negative'}"><span>💼 期間収支</span><span>${yb>=0?'+':''}${fmt(yb)} 円</span></div>`;
   renderYearComparison(year,startYM,endYM,sy,sm,ey,em,periodEnd);
   renderYearBudget(year);
+  // 月別推移（集計期間内の各月）
+  const monthTrendPoints=monthItems.map(mi=>({label:mi.label,value:mi.amount,jump:['jump-month',mi.jumpMonth]}));
+  const b=getBudget();
+  $('yearMonthTrend').innerHTML=buildTrendChart(monthTrendPoints,{avg:b.monthlyVariableDefault||0});
+  // 年別推移（過去5年の年間変動費）
+  const yearPoints=[];
+  for(let yy=year-4;yy<=year;yy++){
+    let yt=0; for(let m=1;m<=12;m++) yt+=aggregatePeriodTotal(new Date(yy,m-1,1),new Date(yy,m,0));
+    yearPoints.push({label:`${yy}`,value:yt,jump:['jump-year',yy]});
+  }
+  $('yearTrend').innerHTML=buildTrendChart(yearPoints,{avg:(b.monthlyVariableDefault||0)*12});
   renderEntertainmentSubYear(periodStart,periodEnd);
   $('yearMemo').value=loadMeta().yearMemo[year]||'';
 }
@@ -1697,6 +1771,7 @@ document.addEventListener('click',e=>{
   const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;$('catDetailModal').style.display='none';$('searchModal').style.display='none';switchTab('day');renderDay();return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);$('catDetailModal').style.display='none';switchTab('week');return;}
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
+  const jyEl=t.closest('[data-jump-year]'); if(jyEl){const y=Number(jyEl.dataset.jumpYear);yearAnchor=new Date(y,0,1);switchTab('year');return;}
   const cydEl=t.closest('[data-cat-year-detail]'); if(cydEl){showCatYearDetail(cydEl.dataset.catYearDetail);return;}
   const esdEl=t.closest('[data-ent-sub-detail]');
   if(esdEl){ showEntSubMonths(esdEl.dataset.entSubDetail,yearAnchor.getFullYear()); return; }
