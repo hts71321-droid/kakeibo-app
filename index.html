@@ -723,7 +723,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -2134,18 +2134,22 @@ async function startWithFamilyCode(code){
   _familyCode=trimmed; localStorage.setItem(FAMILY_CODE_STORAGE,trimmed);
   const db=firebase.database();
   _dbRef=db.ref('families/'+trimmed);_daysRef=_dbRef.child('days');_metaRef=_dbRef.child('meta');
-  _photosRef=db.ref('photos/'+trimmed); // 写真は別ノード（メイン同期に載せない）
+  _photosRef=_dbRef.child('photos'); // families配下（既存ルールで許可）。days/metaと別購読で同期に載せない
   $('familySetupOverlay').style.display='none';$('loadingScreen').style.display='block';
   try{
-    const snap=await _dbRef.once('value'),data=snap.val()||{};
-    _dayData=data.days||{};_metaData=data.meta||null;_isFirebaseMode=true;
+    // days/metaを個別に読み込む（photos配下は読み込まない＝同期を軽く保つ）
+    const [daysSnap,metaSnap]=await Promise.all([_daysRef.once('value'),_metaRef.once('value')]);
+    _dayData=daysSnap.val()||{};_metaData=metaSnap.val()||null;_isFirebaseMode=true;
     _listenerActive=true;
-    _dbRef.on('value',snap=>{
+    _daysRef.on('value',snap=>{
       if(!_listenerActive)return;
-      const d=snap.val()||{};
       // _pendingDaysData が残っている間は書き込み中のローカルデータを優先
-      _dayData=_pendingDaysData||d.days||{};
-      _metaData=d.meta||null;
+      _dayData=_pendingDaysData||snap.val()||{};
+      renderCurrentTab();updateSyncStatus('synced');
+    });
+    _metaRef.on('value',snap=>{
+      if(!_listenerActive)return;
+      _metaData=snap.val()||null;
       renderCurrentTab();updateSyncStatus('synced');
     });
     $('loadingScreen').style.display='none';$('appContent').style.display='block';
@@ -2189,7 +2193,7 @@ if(!isFirebaseConfigured){
     } else {
       $('migrateCodeModal').style.display='none';
     }
-    _listenerActive=false;if(_dbRef)_dbRef.off();_isFirebaseMode=false;
+    _listenerActive=false;if(_daysRef)_daysRef.off();if(_metaRef)_metaRef.off();if(_dbRef)_dbRef.off();_isFirebaseMode=false;
     $('appContent').style.display='none';
     await startWithFamilyCode(newCode);
   }
