@@ -51,6 +51,8 @@
     .entry-delete{background:none;border:none;color:#e74c3c;font-size:1.3em;cursor:pointer;padding:0 8px;touch-action:manipulation}
     .entry-edit-btn{background:none;border:none;color:#3498db;font-size:1.1em;cursor:pointer;padding:0 4px;touch-action:manipulation}
     .entry-edit-btn.active{color:#e67e22}
+    .entry-photo-btn{background:none;border:none;font-size:1em;cursor:pointer;padding:0 4px;opacity:.45;touch-action:manipulation}
+    .entry-photo-btn.has-photo{opacity:1}
     .total{text-align:right;font-size:1.2em;font-weight:600;color:#2c3e50;padding:10px;background:#ecf0f1;border-radius:8px;margin-top:10px}
     .empty{color:#aaa;text-align:center;padding:16px;font-size:0.9em}
     .hint{font-size:0.8em;color:#888;margin-top:4px}
@@ -593,6 +595,27 @@
     </div>
   </div>
 
+  <!-- 写真添付用の隠しinput -->
+  <input type="file" id="photoFileInput" accept="image/*" style="display:none">
+
+  <!-- 写真表示モーダル -->
+  <div class="modal-overlay" id="photoModal" style="display:none">
+    <div class="modal-content" style="display:flex;flex-direction:column;max-height:90vh;padding-bottom:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0;font-size:1.05em">📷 添付写真</h2>
+        <button id="photoCloseTop" style="background:none;border:none;font-size:1.4em;cursor:pointer;padding:4px;touch-action:manipulation">✕</button>
+      </div>
+      <div style="overflow:auto;flex:1;text-align:center">
+        <img id="photoModalImg" style="max-width:100%;border-radius:8px" alt="添付写真">
+      </div>
+      <div class="modal-footer">
+        <button id="photoReplaceBtn" class="btn btn-blue" style="margin-top:0;margin-bottom:8px">📎 別の写真に差し替え</button>
+        <button id="photoDeleteBtn" class="btn" style="margin-top:0;margin-bottom:8px;background:#e74c3c">🗑 写真を削除</button>
+        <button id="photoCloseBtn" class="btn btn-gray" style="margin-top:0">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="catDetailModal" style="display:none">
     <div class="modal-content" style="display:flex;flex-direction:column;max-height:80vh;padding-bottom:0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -693,13 +716,14 @@ const isFirebaseConfigured = !firebaseConfig.apiKey.startsWith('YOUR_');
 const FAMILY_CODE_STORAGE = 'kakeibo-family-code-v1';
 const BACKUP_KEY = 'kakeibo-meta-backup-v1';
 let _isFirebaseMode = false, _familyCode = null;
-let _dbRef = null, _daysRef = null, _metaRef = null;
+let _dbRef = null, _daysRef = null, _metaRef = null, _photosRef = null;
+let _photoTargetIdx = null; // 写真操作中の明細index
 let _dayData = {}, _metaData = null;
 let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -978,7 +1002,10 @@ function renderDay(){
     const li=document.createElement('li'); li.className='entry-item';
     const cls=p.isCustom?'entry-cat custom':'entry-cat';
     const editCls=(_editingIdx===i)?'entry-edit-btn active':'entry-edit-btn';
-    li.innerHTML=`<span class="${cls}">${p.category}</span><span class="entry-store">${p.store||''}</span><span class="entry-amount">${fmt(p.amount)}円</span><button class="${editCls}" data-edit-i="${i}">✏️</button><button class="entry-delete" data-i="${i}">×</button>`;
+    const photoBtn=p.photoId
+      ? `<button class="entry-photo-btn has-photo" data-view-photo="${i}" title="写真を見る">📷</button>`
+      : `<button class="entry-photo-btn" data-attach-photo="${i}" title="写真を添付">📎</button>`;
+    li.innerHTML=`<span class="${cls}">${p.category}</span><span class="entry-store">${p.store||''}</span><span class="entry-amount">${fmt(p.amount)}円</span>${photoBtn}<button class="${editCls}" data-edit-i="${i}">✏️</button><button class="entry-delete" data-i="${i}">×</button>`;
     list.appendChild(li);
   });
   const total=entry.purchases.reduce((s,p)=>s+Number(p.amount||0),0);
@@ -1769,7 +1796,9 @@ function deleteItem(type,itemId){ const meta=loadMeta();let list;if(type==='inco
 // ==================== グローバルクリック ====================
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);entry.purchases.splice(i,1);setDayEntry(date,entry);resetDayForm();renderDay();return; }
+  if(t.classList.contains('entry-delete')){ if(!confirm('この項目を削除しますか？'))return;const date=$('dateInput').value,i=Number(t.dataset.i),entry=getDayEntry(date);const delPid=entry.purchases[i]&&entry.purchases[i].photoId;if(delPid&&_photosRef)_photosRef.child(delPid).remove().catch(()=>{});entry.purchases.splice(i,1);setDayEntry(date,entry);resetDayForm();renderDay();return; }
+  if(t.dataset.attachPhoto!==undefined){ _photoTargetIdx=Number(t.dataset.attachPhoto); $('photoFileInput').value=''; $('photoFileInput').click(); return; }
+  if(t.dataset.viewPhoto!==undefined){ openPhotoModal(Number(t.dataset.viewPhoto)); return; }
   if(t.dataset.editI!==undefined){
     const i=Number(t.dataset.editI),date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[i];
     if(!p)return;
@@ -2105,6 +2134,7 @@ async function startWithFamilyCode(code){
   _familyCode=trimmed; localStorage.setItem(FAMILY_CODE_STORAGE,trimmed);
   const db=firebase.database();
   _dbRef=db.ref('families/'+trimmed);_daysRef=_dbRef.child('days');_metaRef=_dbRef.child('meta');
+  _photosRef=db.ref('photos/'+trimmed); // 写真は別ノード（メイン同期に載せない）
   $('familySetupOverlay').style.display='none';$('loadingScreen').style.display='block';
   try{
     const snap=await _dbRef.once('value'),data=snap.val()||{};
@@ -2386,6 +2416,77 @@ $('searchStore').addEventListener('keydown',e=>{ if(e.key==='Enter')runSearch();
 $('searchCloseBtn').addEventListener('click',()=>$('searchModal').style.display='none');
 $('searchCloseTop').addEventListener('click',()=>$('searchModal').style.display='none');
 $('searchModal').addEventListener('click',e=>{ if(e.target.id==='searchModal')$('searchModal').style.display='none'; });
+
+// ==================== 写真添付（明細に紐付け・別ノード保存） ====================
+// 画像を縮小してdataURL(JPEG)化。longEdge=最大辺, quality=画質
+function compressImage(file,longEdge,quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('画像読み込み失敗'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('画像デコード失敗'));
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>h){ if(w>longEdge){ h=Math.round(h*longEdge/w); w=longEdge; } }
+        else { if(h>longEdge){ w=Math.round(w*longEdge/h); h=longEdge; } }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL('image/jpeg',quality));
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function handlePhotoFileSelected(file){
+  if(!file){ return; }
+  if(_photoTargetIdx===null||!_photosRef){ return; }
+  const date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[_photoTargetIdx];
+  if(!p){ alert('対象の明細が見つかりません'); return; }
+  updateSyncStatus('syncing');
+  try{
+    const dataUrl=await compressImage(file,1000,0.55);
+    // 数十〜100KB程度を想定。念のため上限チェック
+    if(dataUrl.length>900000){
+      const smaller=await compressImage(file,800,0.45);
+      if(smaller.length>900000){ alert('画像が大きすぎます。別の写真でお試しください'); updateSyncStatus('synced'); return; }
+      var finalUrl=smaller;
+    } else var finalUrl=dataUrl;
+    const oldPid=p.photoId;
+    const pid='ph-'+date+'-'+_photoTargetIdx+'-'+genId();
+    await _photosRef.child(pid).set(finalUrl);
+    if(oldPid) _photosRef.child(oldPid).remove().catch(()=>{});
+    // 明細にphotoIdを紐付けて保存
+    const e2=getDayEntry(date); if(e2.purchases[_photoTargetIdx]){ e2.purchases[_photoTargetIdx].photoId=pid; setDayEntry(date,e2); }
+    renderDay(); updateSyncStatus('synced');
+  }catch(err){ alert('写真の保存に失敗しました: '+err.message); updateSyncStatus('error'); }
+}
+async function openPhotoModal(idx){
+  const date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[idx];
+  if(!p||!p.photoId||!_photosRef){ return; }
+  _photoTargetIdx=idx;
+  $('photoModalImg').removeAttribute('src');
+  $('photoModalImg').alt='読み込み中...';
+  $('photoModal').style.display='flex';
+  try{
+    const snap=await _photosRef.child(p.photoId).once('value');
+    const url=snap.val();
+    if(url) $('photoModalImg').src=url; else $('photoModalImg').alt='写真が見つかりません';
+  }catch(err){ $('photoModalImg').alt='読み込み失敗'; }
+}
+$('photoFileInput').addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; handlePhotoFileSelected(f); });
+$('photoReplaceBtn').addEventListener('click',()=>{ if(_photoTargetIdx===null)return; $('photoModal').style.display='none'; $('photoFileInput').value=''; $('photoFileInput').click(); });
+$('photoDeleteBtn').addEventListener('click',async ()=>{
+  if(_photoTargetIdx===null)return;
+  if(!confirm('この写真を削除しますか？'))return;
+  const date=$('dateInput').value,entry=getDayEntry(date),p=entry.purchases[_photoTargetIdx];
+  if(p&&p.photoId&&_photosRef){ _photosRef.child(p.photoId).remove().catch(()=>{}); delete p.photoId; setDayEntry(date,entry); }
+  $('photoModal').style.display='none'; renderDay();
+});
+$('photoCloseBtn').addEventListener('click',()=>$('photoModal').style.display='none');
+$('photoCloseTop').addEventListener('click',()=>$('photoModal').style.display='none');
+$('photoModal').addEventListener('click',e=>{ if(e.target.id==='photoModal')$('photoModal').style.display='none'; });
 </script>
 </body>
 </html>
