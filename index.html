@@ -57,6 +57,7 @@
     .period-nav{display:flex;align-items:center;gap:8px}
     .period-nav button{padding:8px 14px;background:#ecf0f1;border:none;border-radius:8px;font-size:1em;cursor:pointer;font-weight:600}
     .period-nav .period-label{flex:1;text-align:center;font-size:1.05em;font-weight:600;color:#2c3e50}
+    .period-sticky{position:sticky;top:52px;z-index:400;box-shadow:0 3px 6px rgba(0,0,0,.1)}
     .breakdown-list{list-style:none;padding:0;margin:0}
     .breakdown-item{display:flex;justify-content:space-between;padding:10px;border-bottom:1px solid #eee;font-size:0.95em}
     .breakdown-item:last-child{border-bottom:none}
@@ -331,7 +332,7 @@
 
   <!-- ========== 週タブ ========== -->
   <div class="tab-pane" id="pane-week">
-    <div class="card">
+    <div class="card period-sticky">
       <div class="period-nav">
         <button id="weekPrev">←</button>
         <span class="period-label" id="weekLabel"></span>
@@ -353,12 +354,14 @@
 
   <!-- ========== 月タブ ========== -->
   <div class="tab-pane" id="pane-month">
-    <div class="card">
+    <div class="card period-sticky">
       <div class="period-nav">
         <button id="monthPrev">←</button>
         <span class="period-label" id="monthLabel"></span>
         <button id="monthNext">→</button>
       </div>
+    </div>
+    <div class="card">
       <div class="view-toggle">
         <button class="vtoggle active" id="monthViewList">📋 リスト</button>
         <button class="vtoggle" id="monthViewCal">📅 カレンダー</button>
@@ -411,6 +414,11 @@
         <h2>📌 この月の固定費</h2>
         <div id="monthFixedList"></div>
         <div class="total" id="monthFixedTotal">固定費合計: 0 円</div>
+      </div>
+      <div class="card" id="monthSavingsCard" style="display:none">
+        <h2>🏦 この月の預貯金</h2>
+        <div id="monthSavingsList"></div>
+        <div class="total" id="monthSavingsTotal">預貯金合計: 0 円</div>
       </div>
       <div class="card">
         <h2>🎉 この月の特別出費</h2>
@@ -691,7 +699,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1149,22 +1157,34 @@ function renderMonth(){
   const cats=aggregateByCategory(start,end);
   renderCategoryWithBudget($('monthCategoryList'),cats);
 
-  const fixed=getMonthFixed(year,mIdx),fixedTotal=fixed.reduce((s,i)=>s+i.amt,0);
+  const fixedAll=getMonthFixed(year,mIdx);
+  const savings=fixedAll.filter(i=>i.category==='預貯金');
+  const fixed=fixedAll.filter(i=>i.category!=='預貯金');
+  const fixedTotal=fixed.reduce((s,i)=>s+i.amt,0);
+  const savingsTotal=savings.reduce((s,i)=>s+i.amt,0);
   renderMonthGroupedList($('monthFixedList'),groupByCategory(fixed));
   $('monthFixedTotal').textContent=`固定費合計: ${fmt(fixedTotal)} 円`;
+  if(savings.length){
+    $('monthSavingsCard').style.display='block';
+    renderMonthGroupedList($('monthSavingsList'),groupByCategory(savings));
+    $('monthSavingsTotal').textContent=`預貯金合計: ${fmt(savingsTotal)} 円`;
+  } else { $('monthSavingsCard').style.display='none'; }
 
   const special=getMonthSpecial(year,mIdx),specialTotal=special.reduce((s,i)=>s+i.amt,0);
   renderMonthGroupedList($('monthSpecialList'),groupByCategory(special));
   $('monthSpecialTotal').textContent=`特別出費合計: ${fmt(specialTotal)} 円`;
 
   const incomes=getMonthIncomes(year,mIdx),incomeTotal=incomes.reduce((s,i)=>s+i.amt,0);
-  const balance=incomeTotal-varTotal-fixedTotal-specialTotal;
+  const expenseTotal=varTotal+fixedTotal+savingsTotal+specialTotal;
+  const balance=incomeTotal-expenseTotal;
   $('monthSummary').innerHTML=`
     <div class="summary-row income"><span>💰 収入合計</span><span>${fmt(incomeTotal)} 円</span></div>
     ${incomes.map(i=>`<div class="summary-sub"><span>　${i.person}: ${i.type}${i.memo?' ('+i.memo+')':''}</span><span>${fmt(i.amt)}円</span></div>`).join('')}
     <div class="summary-row expense"><span>🛒 変動支出</span><span>${fmt(varTotal)} 円</span></div>
     <div class="summary-row expense"><span>📌 固定費</span><span>${fmt(fixedTotal)} 円</span></div>
+    ${savingsTotal>0?`<div class="summary-row expense"><span>🏦 預貯金</span><span>${fmt(savingsTotal)} 円</span></div>`:''}
     <div class="summary-row expense"><span>🎉 特別出費</span><span>${fmt(specialTotal)} 円</span></div>
+    <div class="summary-row expense" style="border-top:1px solid #ecf0f1;margin-top:4px;padding-top:8px;font-weight:600;color:#2c3e50"><span>💸 支出合計</span><span>${fmt(expenseTotal)} 円</span></div>
     <div class="summary-row balance ${balance>=0?'positive':'negative'}"><span>💼 月収支</span><span>${balance>=0?'+':''}${fmt(balance)} 円</span></div>`;
 
   renderMonthBudget(year,mIdx,varTotal);
