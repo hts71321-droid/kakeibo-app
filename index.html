@@ -348,6 +348,12 @@
     </div>
     <div class="card"><h2>📊 カテゴリ別合計</h2><ul id="weekCategoryList" class="breakdown-list"></ul><div class="total" id="weekCatTotal"></div></div>
     <div class="card">
+      <details id="weekDetailBox">
+        <summary style="cursor:pointer;font-weight:700;color:#34495e;font-size:1.05em">📋 詳細（カテゴリ別の明細・1週間分）<span class="hint" style="font-weight:400">（タップで開閉）</span></summary>
+        <div id="weekDetailList" style="margin-top:12px"></div>
+      </details>
+    </div>
+    <div class="card">
       <h2>📝 週の備考</h2>
       <textarea id="weekMemo" placeholder="この週のメモ..."></textarea>
       <button id="saveWeekMemoBtn" class="btn btn-green">週メモを保存</button>
@@ -723,7 +729,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1120,7 +1126,35 @@ function renderWeek(){
   const catTotal=Object.values(cats).reduce((s,v)=>s+v,0);
   renderBreakdown($('weekCategoryList'),sortedCatItems(cats));
   $('weekCatTotal').textContent=catTotal>0?`カテゴリ合計: ${fmt(catTotal)} 円`:'';
+  renderWeekDetail(start,end);
   $('weekMemo').value=loadMeta().weekMemo[formatYMD(start)]||'';
+}
+// 1週間分の明細をカテゴリごとにまとめて表示（各行タップで日タブへ）
+function renderWeekDetail(start,end){
+  const groups={}; // category -> [{date,store,amount}]
+  for(let i=0;i<7;i++){
+    const d=addDays(start,i),ds=formatYMD(d);
+    getDayEntry(ds).purchases.forEach(p=>{
+      const c=p.category||'未分類';
+      (groups[c]=groups[c]||[]).push({date:ds,store:p.store||'',amount:Number(p.amount||0)});
+    });
+  }
+  const cats=Object.keys(groups);
+  if(!cats.length){ $('weekDetailList').innerHTML='<div class="empty">この週の明細はありません</div>'; return; }
+  // 合計の多い順に並べる
+  const catTotals=Object.fromEntries(cats.map(c=>[c,groups[c].reduce((s,x)=>s+x.amount,0)]));
+  cats.sort((a,b)=>catTotals[b]-catTotals[a]);
+  $('weekDetailList').innerHTML=cats.map(c=>{
+    const items=groups[c].sort((a,b)=>a.date.localeCompare(b.date));
+    const rows=items.map(it=>{
+      const dlabel=`${Number(it.date.slice(5,7))}/${Number(it.date.slice(8,10))}`;
+      return `<li class="breakdown-item" data-jump="${it.date}" style="cursor:pointer"><span class="breakdown-label"><span style="color:#888;font-size:.85em;margin-right:5px">${dlabel}</span>${it.store||'（店名なし）'}</span><span class="breakdown-amount">${fmt(it.amount)}円</span></li>`;
+    }).join('');
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-weight:600;color:#34495e;padding:6px 0;border-bottom:1px solid #ecf0f1"><span>📂 ${c}</span><span>${fmt(catTotals[c])}円</span></div>
+      <ul class="breakdown-list">${rows}</ul>
+    </div>`;
+  }).join('');
 }
 $('weekPrev').addEventListener('click',()=>{weekAnchor=addDays(weekAnchor,-7);renderWeek();});
 $('weekNext').addEventListener('click',()=>{weekAnchor=addDays(weekAnchor,7);renderWeek();});
