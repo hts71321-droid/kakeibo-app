@@ -243,6 +243,10 @@
         <input type="number" id="amountInput" inputmode="numeric" placeholder="例: 634" style="flex:1">
         <button id="calcOpenBtn" type="button" style="padding:10px 14px;background:#f39c12;color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0">🧮</button>
       </div>
+      <div id="editDateRow" style="display:none;margin-top:10px;padding:10px;background:#fef9e7;border:1px solid #f5d76e;border-radius:8px">
+        <label for="editDateInput" style="margin:0 0 4px">📅 この明細の日付（変更で別の日へ移動）</label>
+        <input type="date" id="editDateInput" style="width:100%">
+      </div>
       <button id="addBtn" type="button" class="btn btn-blue">追加</button>
       <button id="cancelEditBtn" class="btn btn-gray" style="display:none">✕ 編集キャンセル</button>
     </div>
@@ -729,7 +733,7 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1024,7 +1028,7 @@ $('dateInput').addEventListener('change',()=>{ resetDayForm(); renderDay(); });
 function clearDayForm(){
   // 追加後：カテゴリはそのまま、店名・金額だけクリア
   $('storeInput').value='';$('amountInput').value='';
-  _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
+  _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';$('editDateRow').style.display='none';
   $('subCatRow').style.display=$('catInput').value==='娯楽費'?'block':'none';
   updateResetCatBtn();
 }
@@ -1037,7 +1041,7 @@ function resetDayForm(){
   // 完全リセット（編集キャンセル・日付変更時など）
   $('storeInput').value='';$('amountInput').value='';$('customCatInput').value='';
   $('catInput').value='食費';$('customCatRow').style.display='none';$('subCatRow').style.display='none';
-  _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';
+  _editingIdx=null;$('addBtn').textContent='追加';$('cancelEditBtn').style.display='none';$('editDateRow').style.display='none';
   updateResetCatBtn();
 }
 function updateResetCatBtn(){
@@ -1066,7 +1070,21 @@ $('addBtn').addEventListener('click',()=>{
   const isNewEntry=_editingIdx===null;
   if(!isNewEntry){
     if(!entry.purchases[_editingIdx]){alert('更新対象が見つかりません');resetDayForm();renderDay();return;}
-    entry.purchases[_editingIdx]={...entry.purchases[_editingIdx],category,store,amount,isCustom,subCat};
+    const updated={...entry.purchases[_editingIdx],category,store,amount,isCustom,subCat};
+    const newDate=$('editDateInput').value;
+    if(newDate&&newDate!==date){
+      // 別の日付へ移動：元の日から削除し、移動先の日へ追加
+      entry.purchases.splice(_editingIdx,1);
+      setDayEntry(date,entry);
+      const destEntry=getDayEntry(newDate);
+      destEntry.purchases.push(updated);
+      setDayEntry(newDate,destEntry);
+      $('dateInput').value=newDate; // 表示を移動先の日に切り替える
+      clearDayForm();
+      renderDay();updateDatalist();
+      return;
+    }
+    entry.purchases[_editingIdx]=updated;
   } else {
     entry.purchases.push({category,store,amount,isCustom,subCat});
   }
@@ -1845,6 +1863,7 @@ document.addEventListener('click',e=>{
     else $('subCatRow').style.display='none';
     $('storeInput').value=p.store||'';
     $('amountInput').value=p.amount;
+    $('editDateInput').value=date;$('editDateRow').style.display='block';
     $('addBtn').textContent='更新';
     $('cancelEditBtn').style.display='block';
     renderDay();
