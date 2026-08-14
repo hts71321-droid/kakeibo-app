@@ -741,7 +741,7 @@ let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
 let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1273,13 +1273,14 @@ function renderMonth(){
   const incomes=getMonthIncomes(year,mIdx),incomeTotal=incomes.reduce((s,i)=>s+i.amt,0);
   const expenseTotal=varTotal+fixedTotal+savingsTotal+specialTotal;
   const balance=incomeTotal-expenseTotal;
+  const sc='cursor:pointer'; const chev='<span style="color:#bbb;font-size:.85em;margin-left:4px">›</span>';
   $('monthSummary').innerHTML=`
-    <div class="summary-row income"><span>💰 収入合計</span><span>${fmt(incomeTotal)} 円</span></div>
+    <div class="summary-row income" data-summary-detail="income" style="${sc}"><span>💰 収入合計${chev}</span><span>${fmt(incomeTotal)} 円</span></div>
     ${incomes.map(i=>`<div class="summary-sub"><span>　${i.person}: ${i.type}${i.memo?' ('+i.memo+')':''}</span><span>${fmt(i.amt)}円</span></div>`).join('')}
-    <div class="summary-row expense"><span>🛒 変動支出</span><span>${fmt(varTotal)} 円</span></div>
-    <div class="summary-row expense"><span>📌 固定費</span><span>${fmt(fixedTotal)} 円</span></div>
-    ${savingsTotal>0?`<div class="summary-row expense"><span>🏦 預貯金</span><span>${fmt(savingsTotal)} 円</span></div>`:''}
-    <div class="summary-row expense"><span>🎉 特別出費</span><span>${fmt(specialTotal)} 円</span></div>
+    <div class="summary-row expense" data-summary-detail="variable" style="${sc}"><span>🛒 変動支出${chev}</span><span>${fmt(varTotal)} 円</span></div>
+    <div class="summary-row expense" data-summary-detail="fixed" style="${sc}"><span>📌 固定費${chev}</span><span>${fmt(fixedTotal)} 円</span></div>
+    ${savingsTotal>0?`<div class="summary-row expense" data-summary-detail="savings" style="${sc}"><span>🏦 預貯金${chev}</span><span>${fmt(savingsTotal)} 円</span></div>`:''}
+    <div class="summary-row expense" data-summary-detail="special" style="${sc}"><span>🎉 特別出費${chev}</span><span>${fmt(specialTotal)} 円</span></div>
     <div class="summary-row expense" style="border-top:1px solid #ecf0f1;margin-top:4px;padding-top:8px;font-weight:600;color:#2c3e50"><span>💸 支出合計</span><span>${fmt(expenseTotal)} 円</span></div>
     <div class="summary-row balance ${balance>=0?'positive':'negative'}"><span>💼 月収支</span><span>${balance>=0?'+':''}${fmt(balance)} 円</span></div>`;
 
@@ -1288,6 +1289,38 @@ function renderMonth(){
   renderMonthTrend(year,mIdx);
   renderMonthCC(ym);
   $('monthMemo').value=loadMeta().monthMemo[ym]||'';
+}
+
+// 月サマリー行タップ → 明細をモーダル表示（catDetailModalを流用）
+function showMonthSummaryDetail(type){
+  const start=getMonthStart(monthAnchor),end=getMonthEnd(monthAnchor);
+  const year=start.getFullYear(),mIdx=start.getMonth()+1;
+  const empty='<li class="empty">データなし</li>';
+  const row=(label,amt,dateAttr)=>`<li class="breakdown-item"${dateAttr||''}><span class="breakdown-label">${label}</span><span class="breakdown-amount">${fmt(amt)}円</span></li>`;
+  const dspan=d=>d?`<span style="color:#888;font-size:.85em;margin-right:5px">${d.slice(5).replace('-','/')}</span>`:'';
+  let title='',total=0,html='';
+  if(type==='income'){
+    const items=getMonthIncomes(year,mIdx); title='💰 収入合計'; total=items.reduce((s,i)=>s+i.amt,0);
+    html=items.length?items.map(i=>row(`${i.person}: ${i.type}${i.memo?' ('+i.memo+')':''}`,i.amt)).join(''):empty;
+  } else if(type==='fixed'){
+    const items=getMonthFixed(year,mIdx); title='📌 固定費'; total=items.reduce((s,i)=>s+i.amt,0);
+    html=items.length?items.map(i=>row(`${i.category} / ${i.label}${i.memo?' ('+i.memo+')':''}`,i.amt)).join(''):empty;
+  } else if(type==='savings'){
+    const items=getMonthFixed(year,mIdx).filter(i=>i.category==='預貯金'); title='🏦 預貯金'; total=items.reduce((s,i)=>s+i.amt,0);
+    html=items.length?items.map(i=>row(`${i.label}${i.memo?' ('+i.memo+')':''}`,i.amt)).join(''):empty;
+  } else if(type==='special'){
+    const items=getMonthSpecial(year,mIdx); title='🎉 特別出費'; total=items.reduce((s,i)=>s+i.amt,0);
+    html=items.length?items.map(i=>row(`${dspan(i.date)}${i.category} / ${i.label||''}${i.memo?' ('+i.memo+')':''}`,i.amt)).join(''):empty;
+  } else if(type==='variable'){
+    const ss=formatYMD(start),ee=formatYMD(end),data=loadDayData(),purchases=[];
+    Object.keys(data).filter(d=>d>=ss&&d<=ee).sort().forEach(date=>{getDayEntry(date).purchases.forEach(p=>purchases.push({date,store:p.store||'',category:p.category,amount:Number(p.amount||0)}));});
+    title='🛒 変動支出'; total=purchases.reduce((s,p)=>s+p.amount,0);
+    html=purchases.length?purchases.map(p=>row(`${dspan(p.date)}${p.category} / ${p.store||'（店名なし）'}`,p.amount,` data-jump="${p.date}" style="cursor:pointer"`)).join(''):empty;
+  } else return;
+  $('catDetailTitle').textContent=`${title} の内訳`;
+  $('catDetailTotal').textContent=total?`合計: ${fmt(total)} 円`:'';
+  $('catDetailList').innerHTML=html;
+  $('catDetailModal').style.display='flex';
 }
 
 function renderMonthBudget(year,mIdx,varTotal){
@@ -1887,6 +1920,7 @@ document.addEventListener('click',e=>{
     $('addBtn').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
+  const sdEl=t.closest('[data-summary-detail]'); if(sdEl){ showMonthSummaryDetail(sdEl.dataset.summaryDetail); return; }
   const jEl=t.closest('[data-jump]'); if(jEl){$('dateInput').value=jEl.dataset.jump;$('catDetailModal').style.display='none';$('searchModal').style.display='none';switchTab('day');renderDay();return;}
   const jwEl=t.closest('[data-jump-week]'); if(jwEl){const[y,m,d]=jwEl.dataset.jumpWeek.split('-').map(Number);weekAnchor=new Date(y,m-1,d);$('catDetailModal').style.display='none';switchTab('week');return;}
   const jmEl=t.closest('[data-jump-month]'); if(jmEl){const[y,m]=jmEl.dataset.jumpMonth.split('-').map(Number);monthAnchor=new Date(y,m-1,1);$('catDetailModal').style.display='none';switchTab('month');return;}
