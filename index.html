@@ -251,8 +251,15 @@
       <button id="cancelEditBtn" class="btn btn-gray" style="display:none">✕ 編集キャンセル</button>
     </div>
     <div class="card">
-      <h2>📋 この日の記録</h2>
-      <ul id="entryList" class="entry-list"></ul>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+        <h2 style="margin:0">📋 この日の記録</h2>
+        <select id="daySortSelect" style="padding:6px 8px;border:1px solid #ccc;border-radius:8px;font-size:.9em">
+          <option value="registered">登録順</option>
+          <option value="amountDesc">金額の高い順</option>
+          <option value="amountAsc">金額の低い順</option>
+        </select>
+      </div>
+      <ul id="entryList" class="entry-list" style="margin-top:8px"></ul>
       <div class="total" id="dayTotal">日合計: 0 円</div>
     </div>
     <div class="card">
@@ -733,7 +740,8 @@ let _currentTab = 'day', _listenerActive = false;
 let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
-const APP_VERSION = 'v31';
+let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
+const APP_VERSION = 'v32';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1008,16 +1016,23 @@ function renderDay(){
   const date=$('dateInput').value, entry=getDayEntry(date), list=$('entryList');
   list.innerHTML='';
   if(!entry.purchases.length) list.innerHTML='<li class="empty">この日の記録はまだありません</li>';
-  else entry.purchases.forEach((p,i)=>{
-    const li=document.createElement('li'); li.className='entry-item';
-    const cls=p.isCustom?'entry-cat custom':'entry-cat';
-    const editCls=(_editingIdx===i)?'entry-edit-btn active':'entry-edit-btn';
-    const photoBtn=p.photoId
-      ? `<button class="entry-photo-btn has-photo" data-view-photo="${i}" title="写真を見る">📷</button>`
-      : `<button class="entry-photo-btn" data-attach-photo="${i}" title="写真を添付">📎</button>`;
-    li.innerHTML=`<span class="${cls}">${p.category}</span><span class="entry-store">${p.store||''}</span><span class="entry-amount">${fmt(p.amount)}円</span>${photoBtn}<button class="${editCls}" data-edit-i="${i}">✏️</button><button class="entry-delete" data-i="${i}">×</button>`;
-    list.appendChild(li);
-  });
+  else {
+    // 元のインデックス i は保持したまま、表示順だけ並び替える（データ自体は変更しない）
+    const order=entry.purchases.map((p,i)=>({p,i}));
+    if(_daySortMode==='amountDesc') order.sort((a,b)=>Number(b.p.amount||0)-Number(a.p.amount||0));
+    else if(_daySortMode==='amountAsc') order.sort((a,b)=>Number(a.p.amount||0)-Number(b.p.amount||0));
+    // 'registered' はそのまま（登録順）
+    order.forEach(({p,i})=>{
+      const li=document.createElement('li'); li.className='entry-item';
+      const cls=p.isCustom?'entry-cat custom':'entry-cat';
+      const editCls=(_editingIdx===i)?'entry-edit-btn active':'entry-edit-btn';
+      const photoBtn=p.photoId
+        ? `<button class="entry-photo-btn has-photo" data-view-photo="${i}" title="写真を見る">📷</button>`
+        : `<button class="entry-photo-btn" data-attach-photo="${i}" title="写真を添付">📎</button>`;
+      li.innerHTML=`<span class="${cls}">${p.category}</span><span class="entry-store">${p.store||''}</span><span class="entry-amount">${fmt(p.amount)}円</span>${photoBtn}<button class="${editCls}" data-edit-i="${i}">✏️</button><button class="entry-delete" data-i="${i}">×</button>`;
+      list.appendChild(li);
+    });
+  }
   const total=entry.purchases.reduce((s,p)=>s+Number(p.amount||0),0);
   $('dayTotal').textContent=`日合計: ${fmt(total)} 円`;
   const cats={}; entry.purchases.forEach(p=>{ const c=p.category||''; cats[c]=(cats[c]||0)+Number(p.amount||0); });
@@ -1025,6 +1040,8 @@ function renderDay(){
   $('memoInput').value=entry.memo||'';
 }
 $('dateInput').addEventListener('change',()=>{ resetDayForm(); renderDay(); });
+$('daySortSelect').value=_daySortMode;
+$('daySortSelect').addEventListener('change',()=>{ _daySortMode=$('daySortSelect').value; localStorage.setItem('kakeibo-day-sort',_daySortMode); renderDay(); });
 function clearDayForm(){
   // 追加後：カテゴリはそのまま、店名・金額だけクリア
   $('storeInput').value='';$('amountInput').value='';
