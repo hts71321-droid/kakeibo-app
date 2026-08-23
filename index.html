@@ -741,7 +741,7 @@ let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
 let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1159,7 +1159,21 @@ function renderWeek(){
   }
   const cats=aggregateByCategory(start,end);
   const catTotal=Object.values(cats).reduce((s,v)=>s+v,0);
-  renderBreakdown($('weekCategoryList'),sortedCatItems(cats));
+  if(crossesMonth){
+    // 月をまたぐ週はカテゴリ別合計も月ごとに分ける
+    const firstOfEnd=new Date(end.getFullYear(),end.getMonth(),1);
+    const aEnd=addDays(firstOfEnd,-1);
+    const catsA=aggregateByCategory(start,aEnd),catsB=aggregateByCategory(firstOfEnd,end);
+    const subA=Object.values(catsA).reduce((s,v)=>s+v,0),subB=Object.values(catsB).reduce((s,v)=>s+v,0);
+    const section=(mLabel,catsObj,sub,tag)=>{
+      const header=`<li class="breakdown-item" style="background:#f5f5f5;border-radius:6px"><span class="breakdown-label" style="font-weight:bold;color:#666">${mLabel} 小計</span><span class="breakdown-amount" style="font-weight:bold;color:#666">${fmt(sub)}円</span></li>`;
+      const rows=sortedCatItems(catsObj).filter(it=>it.amount>0).map(it=>`<li class="breakdown-item" data-cat-detail="${it.label}" data-cat-month="${tag}"><span class="breakdown-label">${it.label}</span><span class="breakdown-amount">${fmt(it.amount)}円</span></li>`).join('');
+      return header+rows;
+    };
+    $('weekCategoryList').innerHTML=section(`${start.getMonth()+1}月`,catsA,subA,'A')+section(`${end.getMonth()+1}月`,catsB,subB,'B');
+  } else {
+    renderBreakdown($('weekCategoryList'),sortedCatItems(cats));
+  }
   $('weekCatTotal').textContent=catTotal>0?`カテゴリ合計: ${fmt(catTotal)} 円`:'';
   renderWeekDetail(start,end);
   $('weekMemo').value=loadMeta().weekMemo[formatYMD(start)]||'';
@@ -1957,10 +1971,14 @@ document.addEventListener('click',e=>{
       const purchases=getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).map(p=>({date:ds,store:p.store||'',amount:p.amount}));
       showCatDetailModal(cn||'未分類',purchases,false);
     } else if(cdEl.closest('#pane-week')){
-      // 週タブ: 個別明細（日付付き）
-      const ws=getWeekStart(weekAnchor);
-      const purchases=[];
-      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d);getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date:ds,store:p.store||'',amount:p.amount}));}
+      // 週タブ: 個別明細（日付付き）。月別セクションのタップは該当月のみに絞る
+      const ws=getWeekStart(weekAnchor),we=addDays(ws,6);
+      let rangeStart=ws,rangeEnd=we;
+      const cm=cdEl.dataset.catMonth;
+      if(cm==='A'){ rangeStart=ws; rangeEnd=addDays(new Date(we.getFullYear(),we.getMonth(),1),-1); }
+      else if(cm==='B'){ rangeStart=new Date(we.getFullYear(),we.getMonth(),1); rangeEnd=we; }
+      const ss=formatYMD(rangeStart),ee=formatYMD(rangeEnd),purchases=[];
+      for(let i=0;i<7;i++){const d=addDays(ws,i),ds=formatYMD(d);if(ds<ss||ds>ee)continue;getDayEntry(ds).purchases.filter(p=>(p.category||'')===cn).forEach(p=>purchases.push({date:ds,store:p.store||'',amount:p.amount}));}
       showCatDetailModal(cn||'未分類',purchases,true);
     } else if(cdEl.closest('#pane-month')){
       // 月タブ: 個別明細（日付付き）
