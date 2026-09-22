@@ -339,7 +339,10 @@
         <button class="calc-btn calc-fn" data-action="backspace">⌫</button>
         <button class="calc-btn calc-eq" data-action="equals">=</button>
       </div>
-      <button id="calcCancelBtn" style="width:100%;margin-top:10px;padding:10px;background:#eee;border:none;border-radius:8px;font-size:14px;cursor:pointer">キャンセル</button>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="calcCancelBtn" style="flex:1;padding:12px;background:#eee;border:none;border-radius:8px;font-size:14px;cursor:pointer">キャンセル</button>
+        <button id="calcApplyBtn" style="flex:2;padding:12px;background:#27ae60;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">✓ 金額に反映</button>
+      </div>
     </div>
   </div>
 
@@ -741,7 +744,7 @@ let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
 let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -2037,11 +2040,25 @@ document.addEventListener('click',e=>{
 
 // ==================== 電卓 ====================
 (function initCalc(){
-  let calcVal = '0', calcExpr = '', calcOp = null, calcNewNum = true;
+  // acc: 累計, calcVal: 入力中の数値, calcOp: 保留中の演算子, calcNewNum: 次の数字で入れ替え
+  let acc = null, calcVal = '0', calcOp = null, calcNewNum = true, calcChain = '';
 
   function updateDisplay(){
     $('calcDisplay').textContent = Number(calcVal).toLocaleString('ja-JP');
-    $('calcExpr').textContent = calcExpr;
+    $('calcExpr').textContent = calcChain;
+  }
+  function fmtNum(n){ return Number(n).toLocaleString('ja-JP'); }
+  function compute(a,op,b){
+    if(op==='+') return a+b; if(op==='-') return a-b;
+    if(op==='×') return a*b; if(op==='÷') return b!==0?a/b:0; return b;
+  }
+  // 保留中の演算を確定して acc に反映
+  function flush(){
+    const b = parseFloat(calcVal);
+    if(calcOp!==null && acc!==null){ acc = compute(acc, calcOp, b); }
+    else { acc = b; }
+    acc = Math.round(acc * 100) / 100;
+    return acc;
   }
 
   let _calcTarget = 'amountInput';
@@ -2049,16 +2066,25 @@ document.addEventListener('click',e=>{
     _calcTarget = targetId || 'amountInput';
     const cur = Number($(targetId||'amountInput').value);
     calcVal = cur > 0 ? String(cur) : '0';
-    calcExpr = ''; calcOp = null; calcNewNum = true;
+    acc = null; calcOp = null; calcNewNum = true; calcChain = '';
     $('calcModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     updateDisplay();
   }
   function closeCalc(){ $('calcModal').style.display = 'none'; document.body.style.overflow = ''; }
+  function applyResult(){
+    // 反映：未確定の計算があれば先に確定
+    if(calcOp!==null && !calcNewNum){ flush(); calcVal=String(acc); calcOp=null; calcNewNum=true; }
+    else if(acc!==null && calcNewNum && calcOp!==null){ /* 演算子直後は無視 */ }
+    const result = Math.round(parseFloat(calcVal));
+    if(result > 0) $(_calcTarget).value = result;
+    closeCalc();
+  }
 
   $('calcOpenBtn').addEventListener('click', ()=>openCalc('amountInput'));
   $('spCalcBtn') && $('spCalcBtn').addEventListener('click', ()=>openCalc('spAmount'));
   $('calcCancelBtn').addEventListener('click', closeCalc);
+  $('calcApplyBtn').addEventListener('click', applyResult);
   $('calcModal').addEventListener('click', e => { if(e.target === $('calcModal')) closeCalc(); });
 
   $('calcModal').addEventListener('click', e => {
@@ -2066,28 +2092,24 @@ document.addEventListener('click',e=>{
     const num = btn.dataset.num, op = btn.dataset.op, action = btn.dataset.action;
 
     if(num !== undefined){
-      if(calcNewNum){ calcVal = num === '0' && calcVal === '0' ? '0' : num; calcNewNum = false; }
+      if(calcNewNum){ calcVal = num; calcNewNum = false; }
       else { calcVal = calcVal === '0' ? num : calcVal + num; }
     } else if(op){
-      calcExpr = Number(calcVal).toLocaleString('ja-JP') + ' ' + op;
+      // 連続計算：保留中の演算があり、数字入力済みなら先に確定
+      if(calcOp!==null && !calcNewNum){ flush(); calcVal = String(acc); }
+      else { acc = parseFloat(calcVal); }
       calcOp = op; calcNewNum = true;
+      calcChain = fmtNum(acc) + ' ' + op + ' ';
     } else if(action === 'equals'){
-      if(calcOp && !calcNewNum){
-        const a = parseFloat(calcExpr.replace(/[,]/g,'').replace(/ .*/,'')), b = parseFloat(calcVal);
-        let r;
-        if(calcOp==='+') r=a+b; else if(calcOp==='-') r=a-b;
-        else if(calcOp==='×') r=a*b; else if(calcOp==='÷') r=b!==0?a/b:0;
-        calcVal = String(Math.round(r * 100) / 100);
-        calcExpr = ''; calcOp = null; calcNewNum = true;
+      // 計算のみ（反映も閉じもしない）。全部足し終わった結果を表示
+      if(calcOp!==null && !calcNewNum){
+        flush();
+        calcVal = String(acc);
+        calcChain = '';
+        calcOp = null; calcNewNum = true;
       }
-      // 計算あり・なしどちらでも金額欄に反映して閉じる
-      const result = Math.round(parseFloat(calcVal));
-      if(result > 0) $(_calcTarget).value = result;
-      updateDisplay();
-      setTimeout(closeCalc, 300);
-      return;
     } else if(action === 'clear'){
-      calcVal='0'; calcExpr=''; calcOp=null; calcNewNum=true;
+      acc=null; calcVal='0'; calcOp=null; calcNewNum=true; calcChain='';
     } else if(action === 'backspace'){
       if(!calcNewNum) calcVal = calcVal.length > 1 ? calcVal.slice(0,-1) : '0';
     } else if(action === 'sign'){
