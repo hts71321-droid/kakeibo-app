@@ -744,7 +744,7 @@ let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
 let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -2089,8 +2089,10 @@ document.addEventListener('click',e=>{
 
   $('calcModal').addEventListener('click', e => {
     const btn = e.target.closest('.calc-btn'); if(!btn) return;
-    const num = btn.dataset.num, op = btn.dataset.op, action = btn.dataset.action;
+    handleKey(btn.dataset.num, btn.dataset.op, btn.dataset.action);
+  });
 
+  function handleKey(num, op, action){
     if(num !== undefined){
       if(calcNewNum){ calcVal = num; calcNewNum = false; }
       else { calcVal = calcVal === '0' ? num : calcVal + num; }
@@ -2118,6 +2120,21 @@ document.addEventListener('click',e=>{
       calcVal = String(parseFloat(calcVal) / 100);
     }
     updateDisplay();
+  }
+
+  // パソコンのキーボードからも操作できるように（電卓が開いている時のみ）
+  const CALC_OP_KEYS = {'+':'+','-':'-','*':'×','x':'×','X':'×','/':'÷'};
+  document.addEventListener('keydown', e => {
+    if($('calcModal').style.display !== 'flex') return;
+    const k = e.key;
+    if(k>='0' && k<='9'){ e.preventDefault(); handleKey(k); return; }
+    if(CALC_OP_KEYS[k]){ e.preventDefault(); handleKey(undefined, CALC_OP_KEYS[k]); return; }
+    if(k==='='){ e.preventDefault(); handleKey(undefined, undefined, 'equals'); return; }
+    if(k==='Enter'){ e.preventDefault(); applyResult(); return; }
+    if(k==='Backspace'){ e.preventDefault(); handleKey(undefined, undefined, 'backspace'); return; }
+    if(k==='Escape'){ e.preventDefault(); closeCalc(); return; }
+    if(k==='%'){ e.preventDefault(); handleKey(undefined, undefined, 'percent'); return; }
+    if(k==='c' || k==='C' || k==='Delete'){ e.preventDefault(); handleKey(undefined, undefined, 'clear'); return; }
   });
 })();
 
