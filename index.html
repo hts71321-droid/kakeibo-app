@@ -744,7 +744,7 @@ let _catDetailBackFn = null;
 let _monthView = 'list'; // 'list' | 'cal'
 let _editingIdx = null;
 let _daySortMode = localStorage.getItem('kakeibo-day-sort') || 'registered';
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 let _pendingDaysData = null; // 書き込み中のdays全体を保持（リスナーの上書きを防ぐ）
 
 // ==================== ユーティリティ ====================
@@ -1744,11 +1744,24 @@ $('copyPrevYearBtn').addEventListener('click',()=>{
 $('reorderToggle').addEventListener('click',()=>{ reorderMode=!reorderMode;$('reorderToggle').textContent=reorderMode?'🔀 並べ替えモード ON':'📋 通常モード（タップで並べ替えモード）';$('reorderToggle').classList.toggle('btn-orange',reorderMode);$('reorderToggle').classList.toggle('btn-gray',!reorderMode);renderRegular(); });
 
 function renderRegular(){ renderYearSelect();renderIncomeSub();renderFixedSub();renderSpecialSub();renderEntertainmentSub(); }
+let _editingEntSubId = null;
 function renderEntertainmentSub(){
   const subs=(loadMeta().entertainmentSubs||[]);
   const el=$('entSubList');
   if(!subs.length){ el.innerHTML='<div class="empty">サブカテゴリがまだありません</div>'; return; }
-  el.innerHTML=subs.map(s=>`<div class="item-row"><div class="item-info"><div class="item-label">${s.name}</div><div class="item-sub">年間予算: ¥${fmt(s.budget||0)}</div></div><div class="item-actions"><button class="primary" data-edit-ent-sub="${s.id}">編集</button><button class="del" data-del-ent-sub="${s.id}">×</button></div></div>`).join('');
+  el.innerHTML=subs.map(s=>{
+    if(_editingEntSubId===s.id){
+      return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <input type="text" data-ent-sub-name-input="${s.id}" value="${s.name}" placeholder="名前">
+        <input type="number" inputmode="numeric" data-ent-sub-budget-input="${s.id}" value="${s.budget||0}" placeholder="年間予算（円）">
+        <div class="item-actions" style="justify-content:flex-end">
+          <button class="primary" data-save-ent-sub="${s.id}">保存</button>
+          <button data-cancel-edit-ent-sub="${s.id}">キャンセル</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="item-row"><div class="item-info"><div class="item-label">${s.name}</div><div class="item-sub">年間予算: ¥${fmt(s.budget||0)}</div></div><div class="item-actions"><button class="primary" data-edit-ent-sub="${s.id}">編集</button><button class="del" data-del-ent-sub="${s.id}">×</button></div></div>`;
+  }).join('');
 }
 
 function renderIncomeSub(){
@@ -2010,10 +2023,19 @@ document.addEventListener('click',e=>{
     const meta=loadMeta();meta.entertainmentSubs=(meta.entertainmentSubs||[]).filter(s=>s.id!==t.dataset.delEntSub);saveMeta(meta);renderEntertainmentSub();return;
   }
   if(t.dataset.editEntSub){
-    const meta=loadMeta(),s=(meta.entertainmentSubs||[]).find(x=>x.id===t.dataset.editEntSub);if(!s)return;
-    const name=prompt('名前',s.name);if(name===null)return;
-    const budgetStr=prompt('年間予算（円）',s.budget||0);if(budgetStr===null)return;
-    s.name=name.trim()||s.name;s.budget=Number(budgetStr)||0;saveMeta(meta);renderEntertainmentSub();return;
+    _editingEntSubId=t.dataset.editEntSub; renderEntertainmentSub(); return;
+  }
+  if(t.dataset.cancelEditEntSub){
+    _editingEntSubId=null; renderEntertainmentSub(); return;
+  }
+  if(t.dataset.saveEntSub){
+    const id=t.dataset.saveEntSub;
+    const meta=loadMeta(),s=(meta.entertainmentSubs||[]).find(x=>x.id===id);if(!s){_editingEntSubId=null;renderEntertainmentSub();return;}
+    const nameEl=document.querySelector(`[data-ent-sub-name-input="${id}"]`),budgetEl=document.querySelector(`[data-ent-sub-budget-input="${id}"]`);
+    const name=(nameEl?.value||'').trim();
+    if(!name){alert('名前を入力してください');return;}
+    s.name=name; s.budget=Number(budgetEl?.value)||0;
+    saveMeta(meta); _editingEntSubId=null; renderEntertainmentSub(); return;
   }
   if(t.id==='addSpecialTxBtn'){ handleAddSpecialTx(); return; }
   if(t.dataset.addIncome) openModal({type:'income',itemId:null,ownerId:t.dataset.addIncome});
